@@ -314,11 +314,17 @@ io.on('connection', (socket) => {
       pioireLeft: room.pioche.length
     });
 
-    // Si peut jouer maintenant, garder le tour, sinon passer
-    if (!canPlay(room.hands[socket.id], room.boardEnds)) {
-      nextTurn(room);
+    const canNowPlay = canPlay(room.hands[socket.id], room.boardEnds);
+
+    if (canNowPlay) {
+      // Peut jouer maintenant -> garder le tour et notifier
       io.to(code).emit('turn_change', { currentTurn: room.currentTurn, skipped: [] });
+    } else if (room.pioche.length === 0) {
+      // Pioche vide et ne peut pas jouer -> passer le tour
+      nextTurn(room);
+      io.to(code).emit('turn_change', { currentTurn: room.currentTurn, skipped: [socket.id] });
     }
+    // Sinon : pioche non vide, ne peut pas jouer -> continuer a piocher
   });
 
   // Déconnexion
