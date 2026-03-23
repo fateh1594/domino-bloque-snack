@@ -173,9 +173,6 @@ function buildSnake(board, bw, bh) {
 
   const n = board.length;
 
-  // DEBUG - afficher l'ordre recu
-  console.log('BOARD RECU:', board.map((b,i) => i+':'+b.piece.join('|')+'('+b.side+')').join(' | '));
-
   // L'ordre du tableau board EST l'ordre visuel gauche→droite
   // car le serveur utilise unshift() pour les pieces gauche et push() pour les droites
   // Donc board[0] = piece la plus a gauche, board[n-1] = piece la plus a droite
@@ -197,29 +194,31 @@ function buildSnake(board, bw, bh) {
 
   const tiles = [];
 
+  // Precalculer offsetX par ligne
+  const rowOffsets = {};
+  for (let r = 0; r < realRows; r++) {
+    const itemsInRow = Math.min(perRow, n - r * perRow);
+    rowOffsets[r] = Math.max(0, Math.floor((bw - itemsInRow * dw) / 2));
+  }
+
   for (let i = 0; i < n; i++) {
     const rowIdx    = Math.floor(i / perRow);
     const posInRow  = i % perRow;
-    const isEvenRow = rowIdx % 2 === 0; // ligne paire : gauche→droite
+    const isEvenRow = rowIdx % 2 === 0;
 
     const item     = sequence[i];
     const isDouble = item.piece[0] === item.piece[1];
 
-    // Position dans la ligne (selon direction)
-    const col = isEvenRow ? posInRow : (perRow - 1 - posInRow);
-
-    // Nombre de dominos dans cette ligne (pour centrage)
-    const itemsInRow = Math.min(perRow, n - rowIdx * perRow);
-    const rowW       = itemsInRow * dw;
-    const offsetX    = Math.floor((bw - rowW) / 2);
+    // Sur ligne paire : gauche→droite (posInRow 0,1,2...)
+    // Sur ligne impaire : droite→gauche (posInRow inversé)
+    const col     = isEvenRow ? posInRow : (Math.min(perRow, n - rowIdx * perRow) - 1 - posInRow);
+    const offsetX = rowOffsets[rowIdx];
 
     let x = offsetX + col * dw;
     let y = startY + rowIdx * dh;
     let tw = dw, th = dh, vertical = false;
 
     if (isDouble) {
-      // Double : orientation perpendiculaire (vertical sur ligne horizontale)
-      // Centre sur la case du domino normal
       tw = dh;
       th = dw;
       vertical = true;
@@ -319,11 +318,13 @@ export default function App() {
     if (!canPlay(piece)) return showToast('Pièce non jouable');
 
     if (!boardEnds) {
-      socketRef.current.emit('play_piece',{code:roomCode,piece,side:'right'});
+      // Premier coup : sélectionner pour afficher la zone centrale
+      setSelectedIdx(selectedIdx === idx ? null : idx);
       return;
     }
     const left  = canPlayLeft(piece);
     const right = canPlayRight(piece);
+    // Si un seul côté possible → jouer directement
     if (left && !right) {
       socketRef.current.emit('play_piece',{code:roomCode,piece,side:'left'});
       return;
@@ -332,6 +333,7 @@ export default function App() {
       socketRef.current.emit('play_piece',{code:roomCode,piece,side:'right'});
       return;
     }
+    // Les deux côtés possibles → sélectionner et afficher les zones
     setSelectedIdx(selectedIdx === idx ? null : idx);
   }
 
