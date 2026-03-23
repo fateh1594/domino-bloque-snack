@@ -228,24 +228,35 @@ io.on('connection', (socket) => {
       room.board.push({ piece: played, side: 'center' });
       room.boardEnds = { left: played[0], right: played[1] };
     } else {
-      if (side === 'left') {
+      const matchesLeft  = played[0] === room.boardEnds.left || played[1] === room.boardEnds.left;
+      const matchesRight = played[0] === room.boardEnds.right || played[1] === room.boardEnds.right;
+
+      // Refuser si la piece ne correspond a aucun cote
+      if (!matchesLeft && !matchesRight) return;
+
+      // Determiner le vrai cote : si un seul cote possible, forcer ce cote
+      let actualSide = side;
+      if (matchesLeft && !matchesRight) actualSide = 'left';
+      if (matchesRight && !matchesLeft) actualSide = 'right';
+
+      if (actualSide === 'left') {
         if (played[1] === room.boardEnds.left) {
           room.board.unshift({ piece: played, side: 'left' });
           room.boardEnds.left = played[0];
-        } else if (played[0] === room.boardEnds.left) {
+        } else {
           played = [played[1], played[0]];
           room.board.unshift({ piece: played, side: 'left' });
           room.boardEnds.left = played[0];
-        } else return;
+        }
       } else {
         if (played[0] === room.boardEnds.right) {
           room.board.push({ piece: played, side: 'right' });
           room.boardEnds.right = played[1];
-        } else if (played[1] === room.boardEnds.right) {
+        } else {
           played = [played[1], played[0]];
           room.board.push({ piece: played, side: 'right' });
           room.boardEnds.right = played[1];
-        } else return;
+        }
       }
     }
 
@@ -280,22 +291,31 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Skip les joueurs qui ne peuvent pas jouer
+    // Gestion du tour suivant selon le mode
     let skipped = [];
-    while (!canPlay(room.hands[room.currentTurn], room.boardEnds)) {
-      skipped.push(room.currentTurn);
-      io.to(room.currentTurn).emit('forced_pass', {});
-      nextTurn(room);
-      if (skipped.length >= room.players.length) {
-        endManche(room, 'blocked');
-        return;
+    if (room.maxPlayers === 2) {
+      // Mode 2j : si le joueur suivant ne peut pas jouer, il DOIT piocher
+      // On notifie juste que c'est son tour, il piochera lui-meme
+      io.to(code).emit('turn_change', {
+        currentTurn: room.currentTurn,
+        skipped: []
+      });
+    } else {
+      // Mode 4j : si un joueur ne peut pas jouer il passe automatiquement
+      while (!canPlay(room.hands[room.currentTurn], room.boardEnds)) {
+        skipped.push(room.currentTurn);
+        io.to(room.currentTurn).emit('forced_pass', {});
+        nextTurn(room);
+        if (skipped.length >= room.players.length) {
+          endManche(room, 'blocked');
+          return;
+        }
       }
+      io.to(code).emit('turn_change', {
+        currentTurn: room.currentTurn,
+        skipped
+      });
     }
-
-    io.to(code).emit('turn_change', {
-      currentTurn: room.currentTurn,
-      skipped
-    });
   });
 
   // Piocher (mode 2 joueurs)
