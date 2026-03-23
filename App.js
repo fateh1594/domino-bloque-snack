@@ -175,88 +175,70 @@ function HiddenDomino({ w = 14, h = 26 }) {
 function buildSnake(board, bw, bh) {
   if (!board || board.length === 0 || bw < 10 || bh < 10) return [];
 
-  const n = board.length;
+  const n   = board.length;
+  const PAD = 4;
 
-  // ── 1. Taille adaptative ──────────────────────────────────────────────────
-  // On calcule combien de dominos tiennent par ligne
-  // et on ajuste la taille pour que le serpent tienne dans le plateau
-
-  // Estimation : on veut que le serpent tienne dans bh
-  // Chaque ligne fait dh de hauteur
-  // On essaie différentes tailles et on prend la plus grande qui tient
-
-  let dw = 20, dh = 10;
-  for (let testDW = 56; testDW >= 18; testDW -= 2) {
-    const testDH  = Math.round(testDW * 0.52);
-    const perRow  = Math.max(2, Math.floor(bw / testDW));
-    const numRows = Math.ceil(n / perRow);
-    if (numRows * testDH <= bh - 8) {
-      dw = testDW;
-      dh = testDH;
-      break;
-    }
+  // Taille adaptative : on cherche la plus grande taille qui tient dans bh
+  let dw = 48, dh = 25;
+  for (let w = 54; w >= 16; w -= 2) {
+    const h      = Math.round(w * 0.52);
+    const perRow = Math.max(2, Math.floor((bw - PAD * 2) / w));
+    const rows   = Math.ceil(n / perRow);
+    if (rows * h <= bh - PAD * 2) { dw = w; dh = h; break; }
   }
+  const pip = Math.max(5, Math.floor(dh * 0.68));
 
-  const pip    = Math.max(5, Math.floor(dh * 0.7));
-  const perRow = Math.max(2, Math.floor(bw / dw));
-
-  // ── 2. Construire les positions ───────────────────────────────────────────
-  // On parcourt board[0..n-1] dans l'ordre
-  // On place chaque domino à sa position dans le serpent
+  // Algorithme chaine : chaque domino est place par rapport au precedent
+  // On part du coin haut-gauche et on serpente
+  let x   = PAD;
+  let y   = PAD;
+  let dir = 1; // 1=droite, -1=gauche
 
   const tiles = [];
 
-  // Nombre de lignes
-  const numRows = Math.ceil(n / perRow);
-
-  // Centrage vertical
-  const totalH = numRows * dh;
-  const startY = Math.max(4, Math.floor((bh - totalH) / 2));
-
   for (let i = 0; i < n; i++) {
     const item     = board[i];
-    const rowIdx   = Math.floor(i / perRow);
-    const posInRow = i % perRow;
+    const isDouble = item.piece[0] === item.piece[1];
 
-    // Nombre de dominos dans cette ligne
-    const itemsInRow = Math.min(perRow, n - rowIdx * perRow);
-
-    // Centrage horizontal de la ligne
-    const rowW    = itemsInRow * dw;
-    const offsetX = Math.max(0, Math.floor((bw - rowW) / 2));
-
-    // Direction de la ligne
-    const goRight = rowIdx % 2 === 0;
-
-    // Colonne réelle selon la direction
-    const col = goRight ? posInRow : (itemsInRow - 1 - posInRow);
-
-    // Position de base
-    let x = offsetX + col * dw;
-    let y = startY + rowIdx * dh;
-    let tw = dw, th = dh, vertical = false;
-
-    // Double → vertical, centré sur la case
-    if (item.piece[0] === item.piece[1]) {
-      tw = dh;
-      th = dw;
-      vertical = true;
-      // Centrer horizontalement sur la case du domino normal
-      x = offsetX + col * dw + Math.floor((dw - dh) / 2);
-      // Centrer verticalement sur la ligne
-      y = startY + rowIdx * dh - Math.floor((dw - dh) / 2);
+    if (isDouble) {
+      // Double vertical, centre sur la position courante
+      tiles.push({
+        x: x + Math.floor((dw - dh) / 2),
+        y: y - Math.floor((dw - dh) / 2),
+        w: dh, h: dw,
+        a: item.piece[0], b: item.piece[1],
+        vertical: true, pip,
+      });
+    } else {
+      tiles.push({
+        x, y, w: dw, h: dh,
+        a: item.piece[0], b: item.piece[1],
+        vertical: false, pip,
+      });
     }
 
-    tiles.push({
-      x, y, w: tw, h: th,
-      a: item.piece[0],
-      b: item.piece[1],
-      vertical,
-      pip,
-    });
+    // Calculer la position suivante
+    const nextX = x + dir * dw;
+    if (dir === 1 && nextX + dw > bw - PAD) {
+      // Bord droit : descendre et aller a gauche
+      y  += dh;
+      dir = -1;
+    } else if (dir === -1 && nextX < PAD) {
+      // Bord gauche : descendre et aller a droite
+      y  += dh;
+      dir = 1;
+    } else {
+      x = nextX;
+    }
   }
 
-  return tiles;
+  // Centrer verticalement dans le plateau
+  const minY    = Math.min(...tiles.map(t => t.y));
+  const maxY    = Math.max(...tiles.map(t => t.y + t.h));
+  const totalH  = maxY - minY;
+  const offsetY = Math.max(0, Math.floor((bh - totalH) / 2)) - minY;
+
+  return tiles.map(t => ({ ...t, y: t.y + offsetY }));
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
