@@ -9,16 +9,17 @@ export default function Board({ board }) {
   return (
     <View style={[styles.board, { width, height: height * 0.6 }]}>
       {board.map((item, idx) => (
-        <Domino
+        <View
           key={idx}
-          value={item.piece}
           style={{
             position: 'absolute',
             left: item.x,
             top: item.y,
             transform: [{ rotate: `${item.rotation}deg` }],
           }}
-        />
+        >
+          <Domino value={item.piece} rotation={item.rotation} />
+        </View>
       ))}
     </View>
   );
