@@ -173,6 +173,9 @@ function buildSnake(board, bw, bh) {
 
   const n = board.length;
 
+  // DEBUG - afficher l'ordre recu
+  console.log('BOARD RECU:', board.map((b,i) => i+':'+b.piece.join('|')+'('+b.side+')').join(' | '));
+
   // L'ordre du tableau board EST l'ordre visuel gauche→droite
   // car le serveur utilise unshift() pour les pieces gauche et push() pour les droites
   // Donc board[0] = piece la plus a gauche, board[n-1] = piece la plus a droite
