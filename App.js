@@ -178,61 +178,45 @@ function buildSnake(board, bw, bh) {
   const n   = board.length;
   const PAD = 4;
 
-  // Taille adaptative : on cherche la plus grande taille qui tient dans bh
-  let dw = 48, dh = 25;
-  for (let w = 54; w >= 16; w -= 2) {
-    const h      = Math.round(w * 0.52);
-    const perRow = Math.max(2, Math.floor((bw - PAD * 2) / w));
-    const rows   = Math.ceil(n / perRow);
-    if (rows * h <= bh - PAD * 2) { dw = w; dh = h; break; }
+  // Taille adaptative
+  let dw = 52, dh = 27;
+  for (let w = 56; w >= 20; w -= 2) {
+    const h = Math.round(w * 0.52);
+    const perRow = Math.max(2, Math.floor((bw - PAD*2) / w));
+    const rows = Math.ceil(n / perRow);
+    if (rows * (h + w) <= bh - PAD*2) { dw = w; dh = h; break; }
   }
   const pip = Math.max(5, Math.floor(dh * 0.68));
 
-  // Algorithme chaine : chaque domino est place par rapport au precedent
-  // On part du coin haut-gauche et on serpente
-  let x   = PAD;
-  let y   = PAD;
-  let dir = 1; // 1=droite, -1=gauche
-
+  // Algorithme avec vrais virages :
+  // Le dernier domino avant le bord devient VERTICAL (tourne a 90°)
+  // et la ligne suivante repart dans le sens oppose
   const tiles = [];
+  let x = PAD, y = PAD, dir = 1;
 
   for (let i = 0; i < n; i++) {
-    const item     = board[i];
-    const isDouble = item.piece[0] === item.piece[1];
+    const item = board[i];
+    // Est-ce le dernier domino avant le bord ?
+    const atRightEdge = dir === 1  && x + dw * 2 > bw - PAD;
+    const atLeftEdge  = dir === -1 && x - dw < PAD;
+    const isCorner    = (atRightEdge || atLeftEdge) && i < n - 1;
 
-    if (isDouble) {
-      // Double vertical, centre sur la position courante
-      tiles.push({
-        x: x + Math.floor((dw - dh) / 2),
-        y: y - Math.floor((dw - dh) / 2),
-        w: dh, h: dw,
-        a: item.piece[0], b: item.piece[1],
-        vertical: true, pip,
-      });
+    if (isCorner) {
+      // Poser en virage vertical
+      tiles.push({ x, y, w: dh, h: dw, a: item.piece[0], b: item.piece[1], vertical: true, pip });
+      // Descendre et changer de direction
+      y += dw;
+      dir = -dir;
+      // Repositionner x au debut de la nouvelle ligne
+      x = dir === 1 ? PAD : bw - PAD - dw;
     } else {
-      tiles.push({
-        x, y, w: dw, h: dh,
-        a: item.piece[0], b: item.piece[1],
-        vertical: false, pip,
-      });
-    }
-
-    // Calculer la position suivante
-    const nextX = x + dir * dw;
-    if (dir === 1 && nextX + dw > bw - PAD) {
-      // Bord droit : descendre et aller a gauche
-      y  += dh;
-      dir = -1;
-    } else if (dir === -1 && nextX < PAD) {
-      // Bord gauche : descendre et aller a droite
-      y  += dh;
-      dir = 1;
-    } else {
-      x = nextX;
+      // Domino horizontal normal
+      tiles.push({ x, y, w: dw, h: dh, a: item.piece[0], b: item.piece[1], vertical: false, pip });
+      x += dir * dw;
     }
   }
 
-  // Centrer verticalement dans le plateau
+  // Centrer verticalement
   const minY    = Math.min(...tiles.map(t => t.y));
   const maxY    = Math.max(...tiles.map(t => t.y + t.h));
   const totalH  = maxY - minY;
