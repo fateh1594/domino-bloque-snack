@@ -173,80 +173,58 @@ function buildSnake(board, bw, bh) {
 
   const n = board.length;
 
-  // 1. Taille adaptive
-  // On estime combien de lignes on aura et ajuste la taille
-  const maxPerRow = Math.max(3, Math.floor(bw / 22));
-  const estimatedRows = Math.ceil(n / maxPerRow);
-  const maxDH = Math.floor(bh / (estimatedRows + 1));
-  const dh = Math.max(12, Math.min(30, maxDH)); // hauteur domino horizontal
-  const dw = Math.round(dh * 1.92);             // largeur domino horizontal
-  const pip = Math.max(5, Math.floor(dh * 0.7));
+  // L'ordre du tableau board EST l'ordre visuel gauche→droite
+  // car le serveur utilise unshift() pour les pieces gauche et push() pour les droites
+  // Donc board[0] = piece la plus a gauche, board[n-1] = piece la plus a droite
+  const sequence = board;
 
-  // 2. Reconstituer l'ordre visuel gauche→droite
-  // board[0] = centre, board[i].side = 'left' ou 'right'
-  const leftPieces  = board.filter(b => b.side === 'left').reverse();
-  const centerPiece = board[0];
-  const rightPieces = board.filter(b => b.side === 'right' && b !== board[0]);
+  // Taille adaptative
+  const perRowMax = Math.max(3, Math.floor(bw / 20));
+  const numRows   = Math.ceil(n / perRowMax);
+  const maxDH     = Math.floor((bh - 8) / (numRows + 0.5));
+  const dh        = Math.max(14, Math.min(32, maxDH));
+  const dw        = Math.round(dh * 1.9);
+  const pip       = Math.max(6, Math.floor(dh * 0.68));
+  const perRow    = Math.max(2, Math.floor(bw / dw));
 
-  // Séquence visuelle : gauche → centre → droite
-  const sequence = [...leftPieces, centerPiece, ...rightPieces];
+  // Hauteur totale reelle
+  const realRows = Math.ceil(n / perRow);
+  const totalH   = realRows * dh;
+  const startY   = Math.max(4, Math.floor((bh - totalH) / 2));
 
-  // 3. Calculer le nombre de dominos par ligne
-  const perRow = Math.max(2, Math.floor(bw / dw));
-
-  // 4. Calculer la hauteur totale du serpent pour centrer verticalement
-  const numRows = Math.ceil(sequence.length / perRow);
-  const totalH  = numRows * dh;
-  const startY  = Math.max(4, Math.floor((bh - totalH) / 2));
-
-  // 5. Placer chaque domino
   const tiles = [];
 
-  for (let i = 0; i < sequence.length; i++) {
-    const rowIdx   = Math.floor(i / perRow);
-    const posInRow = i % perRow;
-    const isEvenRow = rowIdx % 2 === 0; // true = gauche→droite, false = droite→gauche
+  for (let i = 0; i < n; i++) {
+    const rowIdx    = Math.floor(i / perRow);
+    const posInRow  = i % perRow;
+    const isEvenRow = rowIdx % 2 === 0; // ligne paire : gauche→droite
 
-    const item = sequence[i];
+    const item     = sequence[i];
     const isDouble = item.piece[0] === item.piece[1];
 
-    let x, y, tw, th, vertical;
+    // Position dans la ligne (selon direction)
+    const col = isEvenRow ? posInRow : (perRow - 1 - posInRow);
+
+    // Nombre de dominos dans cette ligne (pour centrage)
+    const itemsInRow = Math.min(perRow, n - rowIdx * perRow);
+    const rowW       = itemsInRow * dw;
+    const offsetX    = Math.floor((bw - rowW) / 2);
+
+    let x = offsetX + col * dw;
+    let y = startY + rowIdx * dh;
+    let tw = dw, th = dh, vertical = false;
 
     if (isDouble) {
-      // Double : vertical, centré sur la ligne
+      // Double : orientation perpendiculaire (vertical sur ligne horizontale)
+      // Centre sur la case du domino normal
       tw = dh;
       th = dw;
       vertical = true;
-      const colX = isEvenRow
-        ? posInRow * dw
-        : (perRow - 1 - posInRow) * dw;
-      x = colX + Math.floor((dw - dh) / 2);
+      x = offsetX + col * dw + Math.floor((dw - dh) / 2);
       y = startY + rowIdx * dh - Math.floor((dw - dh) / 2);
-    } else {
-      // Normal : horizontal
-      tw = dw;
-      th = dh;
-      vertical = false;
-      x = isEvenRow
-        ? posInRow * dw
-        : (perRow - 1 - posInRow) * dw;
-      y = startY + rowIdx * dh;
     }
 
-    // Centrer horizontalement dans le plateau
-    const rowCount = Math.min(perRow, sequence.length - rowIdx * perRow);
-    const rowW = rowCount * dw;
-    const offsetX = Math.floor((bw - rowW) / 2);
-
-    tiles.push({
-      x: x + offsetX,
-      y,
-      w: tw,
-      h: th,
-      pip,
-      vertical,
-      piece: item.piece,
-    });
+    tiles.push({ x, y, w: tw, h: th, pip, vertical, piece: item.piece });
   }
 
   return tiles;
