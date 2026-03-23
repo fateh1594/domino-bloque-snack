@@ -1,8 +1,11 @@
+// App.js
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, FlatList, StyleSheet } from 'react-native';
+import { View, Text, Button, StyleSheet, Alert, SafeAreaView } from 'react-native';
 import io from 'socket.io-client';
+import Hand from './Hand';
+import Board from './Board';
 
-// ─── URL de ton serveur Render ───────────────────────────────────────────────
+// ─── Configuration du serveur ─────────────────────────────
 const SERVER_URL = 'https://domino-bloque-server.onrender.com';
 
 export default function App() {
@@ -11,118 +14,104 @@ export default function App() {
   const [board, setBoard] = useState([]);
   const [boardEnds, setBoardEnds] = useState(null);
   const [currentTurn, setCurrentTurn] = useState(null);
-  const [players, setPlayers] = useState([]);
-  const [roomCode, setRoomCode] = useState('');
-  const [name, setName] = useState('Player');
+  const [playerId, setPlayerId] = useState(null);
+  const [joined, setJoined] = useState(false);
+  const [roomCode, setRoomCode] = useState(null);
 
+  // ─── Connexion Socket.IO ────────────────────────────────
   useEffect(() => {
     const s = io(SERVER_URL);
     setSocket(s);
 
-    // ─── Événements du serveur ─────────────────────────────────────────────
-    s.on('room_created', ({ code, player, players }) => {
-      setRoomCode(code);
-      setPlayers(players);
-      console.log('Salle créée:', code);
+    s.on('connect', () => {
+      setPlayerId(s.id);
+      console.log('Connecté au serveur avec id:', s.id);
     });
 
-    s.on('room_joined', ({ player, players }) => {
-      setPlayers(players);
-      console.log('Salle rejointe:', player);
+    s.on('room_joined', ({ hand: h, board: b, currentTurn: ct }) => {
+      setJoined(true);
+      setHand(h);
+      setBoard(b);
+      setBoardEnds(null);
+      setCurrentTurn(ct);
     });
 
-    s.on('player_joined', ({ players }) => {
-      setPlayers(players);
+    s.on('manche_start', ({ hand: h, board: b, boardEnds: be, currentTurn: ct }) => {
+      setHand(h);
+      setBoard(b);
+      setBoardEnds(be);
+      setCurrentTurn(ct);
     });
 
-    s.on('manche_start', ({ hand, currentTurn, board, boardEnds, scores }) => {
-      setHand(hand);
-      setBoard(board);
-      setBoardEnds(boardEnds);
-      setCurrentTurn(currentTurn);
+    s.on('piece_played', ({ board: b, boardEnds: be, handCounts }) => {
+      setBoard(b);
+      setBoardEnds(be);
+      // Mettre à jour la main locale si c'est le joueur
+      if (hand.length !== handCounts[playerId]) {
+        setHand(prev => prev.filter((_, i) => i < handCounts[playerId]));
+      }
     });
 
-    s.on('piece_played', ({ board, boardEnds, handCounts }) => {
-      setBoard(board);
-      setBoardEnds(boardEnds);
-      console.log('Mains mises à jour:', handCounts);
-    });
-
-    s.on('hand_update', ({ hand }) => {
-      setHand(hand);
-    });
-
-    s.on('turn_change', ({ currentTurn }) => {
-      setCurrentTurn(currentTurn);
-    });
+    s.on('hand_update', ({ hand: h }) => setHand(h));
+    s.on('turn_change', ({ currentTurn: ct }) => setCurrentTurn(ct));
 
     s.on('game_over', ({ winTeam, scores }) => {
-      alert(`Fin de partie ! Équipe gagnante : ${winTeam}`);
+      Alert.alert('Partie terminée', `Équipe gagnante: ${winTeam}\nScores: ${JSON.stringify(scores)}`);
     });
 
     return () => s.disconnect();
   }, []);
 
-  // ─── Fonctions pour créer / rejoindre salle ───────────────────────────────
-  const createRoom = () => {
+  // ─── Fonctions jeu ─────────────────────────────────────
+  const joinRoom = () => {
     if (!socket) return;
-    socket.emit('create_room', { name, maxPlayers: 2 });
-  };
-
-  const joinRoom = (code) => {
-    if (!socket) return;
+    const name = 'Player';
+    const code = 'ROOM1'; // exemple de code fixe
+    setRoomCode(code);
     socket.emit('join_room', { name, code });
   };
 
-  // ─── Jouer un domino ───────────────────────────────────────────────────────
-  const playPiece = (piece) => {
-    if (!socket || currentTurn !== socket.id) return;
+  const playDomino = (piece) => {
+    if (!socket || currentTurn !== playerId) return;
     socket.emit('play_piece', { code: roomCode, piece, side: 'right' });
   };
 
-  // ─── Tirer un domino ───────────────────────────────────────────────────────
-  const drawPiece = () => {
-    if (!socket) return;
+  const drawDomino = () => {
+    if (!socket || currentTurn !== playerId) return;
     socket.emit('draw_piece', { code: roomCode });
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Domino Bloqué</Text>
-      <Button title="Créer salle" onPress={createRoom} />
-      <Button title="Rejoindre salle" onPress={() => joinRoom(roomCode)} />
-      <Text>Code salle : {roomCode}</Text>
-      <Text>Joueurs : {players.map(p => p.name).join(', ')}</Text>
-      <Text>Tour actuel : {currentTurn}</Text>
-
-      <Text style={styles.subtitle}>Votre main :</Text>
-      <FlatList
-        data={hand}
-        horizontal
-        keyExtractor={(item, idx) => idx.toString()}
-        renderItem={({ item }) => (
-          <Button
-            title={`${item[0]}|${item[1]}`}
-            onPress={() => playPiece(item)}
-          />
-        )}
-      />
-
-      <Button title="Piocher" onPress={drawPiece} />
-
-      <Text style={styles.subtitle}>Plateau :</Text>
-      <View style={styles.board}>
-        {board.map((d, idx) => (
-          <Text key={idx}>{`${d.piece[0]}|${d.piece[1]}`}</Text>
-        ))}
-      </View>
-    </View>
+    <SafeAreaView style={styles.container}>
+      {!joined ? (
+        <Button title="Rejoindre la salle" onPress={joinRoom} />
+      ) : (
+        <>
+          <Text style={styles.info}>
+            {currentTurn === playerId ? 'Votre tour' : "Tour de l'adversaire"}
+          </Text>
+          <Board board={board} />
+          <Hand hand={hand} onPlay={playDomino} />
+          {currentTurn === playerId && <Button title="Piocher un domino" onPress={drawDomino} />}
+        </>
+      )}
+    </SafeAreaView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, marginTop: 50 },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  subtitle: { fontSize: 18, marginTop: 20 },
-  board: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap' },
+  container: {
+    flex: 1,
+    backgroundColor: '#004d00', // vert foncé
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 30,
+  },
+  info: {
+    color: '#FFD700', // doré
+    fontSize: 18,
+    marginVertical: 5,
+    fontWeight: 'bold',
+  },
 });
