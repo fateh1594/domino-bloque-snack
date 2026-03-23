@@ -314,7 +314,6 @@ export default function App() {
   const leftPlayer  = others[1] || null;
   const rightPlayer = others[2] || null;
 
-  const tiles         = buildSnake(board, boardSize.w, boardSize.h);
   const selPiece      = selectedIdx !== null ? myHand[selectedIdx] : null;
   const showLeft      = isMyTurn && selPiece && board.length > 0 && canPlayLeft(selPiece);
   const showRight     = isMyTurn && selPiece && board.length > 0 && canPlayRight(selPiece);
