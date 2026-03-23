@@ -55,11 +55,33 @@ function dealCards(room) {
 }
 
 function findStartingPlayer(room) {
-  // Premier manche : celui qui a [6,6]
-  for (const [pid, hand] of Object.entries(room.hands)) {
-    if (hand.some(d => d[0] === 6 && d[1] === 6)) return pid;
+  if (room.maxPlayers === 4) {
+    // Mode 4j : double-6 est forcément chez l'un des joueurs
+    for (const p of room.players) {
+      if (room.hands[p.id].some(d => d[0] === 6 && d[1] === 6)) return p.id;
+    }
+    return room.players[0].id;
   }
-  return room.players[0].id;
+
+  // Mode 2j : chercher dans l'ordre décroissant double-6, double-5, ..., double-0
+  for (let v = 6; v >= 0; v--) {
+    for (const p of room.players) {
+      if (room.hands[p.id].some(d => d[0] === v && d[1] === v)) return p.id;
+    }
+    // Ce double est dans la pioche → continuer
+  }
+
+  // Aucun double chez les joueurs → celui avec la valeur totale max commence
+  let bestPid = room.players[0].id;
+  let bestVal = -1;
+  for (const p of room.players) {
+    const maxVal = Math.max(...room.hands[p.id].map(d => d[0] + d[1]));
+    if (maxVal > bestVal) {
+      bestVal = maxVal;
+      bestPid = p.id;
+    }
+  }
+  return bestPid;
 }
 
 function canPlay(hand, ends) {
