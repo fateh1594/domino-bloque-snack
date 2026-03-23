@@ -1,710 +1,735 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, Alert, Dimensions, SafeAreaView, StatusBar
+  StyleSheet, Dimensions, StatusBar
 } from 'react-native';
 import { io } from 'socket.io-client';
 
 const SERVER_URL = 'https://domino-bloque.onrender.com';
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
-// ─── Patterns de points ───────────────────────────────────────────────────────
-const PIP_PATTERNS = {
-  0: [0,0,0, 0,0,0, 0,0,0],
-  1: [0,0,0, 0,1,0, 0,0,0],
-  2: [1,0,0, 0,0,0, 0,0,1],
-  3: [1,0,0, 0,1,0, 0,0,1],
-  4: [1,0,1, 0,0,0, 1,0,1],
-  5: [1,0,1, 0,1,0, 1,0,1],
-  6: [1,0,1, 1,0,1, 1,0,1],
+const C = {
+  bg: '#0f1f0f', felt: '#163a1c',
+  gold: '#c9a84c', border: '#2e5c34',
+  text: '#e8e0cc', dim: '#8aad8e',
+  domino: '#f5f2ec', dot: '#1a1a2e',
 };
 
-// ─── Composant Pip Grid ───────────────────────────────────────────────────────
-function PipGrid({ value, size = 20 }) {
-  const pattern = PIP_PATTERNS[value] || PIP_PATTERNS[0];
-  const pipSize = size * 0.22;
+const PIPS = {
+  0: [],
+  1: [[1,1]],
+  2: [[0,2],[2,0]],
+  3: [[0,2],[1,1],[2,0]],
+  4: [[0,0],[0,2],[2,0],[2,2]],
+  5: [[0,0],[0,2],[1,1],[2,0],[2,2]],
+  6: [[0,0],[0,2],[1,0],[1,2],[2,0],[2,2]],
+};
+
+function PipGrid({ value, size }) {
+  const pts  = PIPS[value] || [];
+  const r    = Math.max(1.5, size * 0.14);
+  const pad  = size * 0.08;
+  const cell = (size - pad * 2) / 3;
   return (
-    <View style={{ width: size, height: size, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignContent: 'space-between' }}>
-      {pattern.map((p, i) => (
+    <View style={{ width: size, height: size, position: 'relative' }}>
+      {pts.map(([row, col], i) => (
         <View key={i} style={{
-          width: pipSize, height: pipSize, borderRadius: pipSize,
-          backgroundColor: p ? '#1a1a1a' : 'transparent',
-        }} />
+          position: 'absolute',
+          width: r*2, height: r*2, borderRadius: r,
+          backgroundColor: C.dot,
+          top:  pad + row*cell + cell/2 - r,
+          left: pad + col*cell + cell/2 - r,
+        }}/>
       ))}
     </View>
   );
 }
 
-// ─── Composant Domino (main) ──────────────────────────────────────────────────
-function DominoTile({ piece, selected, playable, isMyTurn, onPress, small = false }) {
-  const w = small ? 32 : 40;
-  const h = small ? 64 : 80;
-  const pipSize = small ? 14 : 18;
+// ── Tailles domino main ───────────────────────────────────────────────────────
+const H_PAD = 8;
+const GAP   = 5;
+const DW    = Math.floor((width - H_PAD * 2 - GAP * 6) / 7);
+const DH    = Math.floor(DW * 1.9);
+const DPIP  = Math.floor(DW * 0.78);
 
-  let borderColor = '#cccccc';
-  if (selected) borderColor = '#c9a84c';
-  else if (playable && isMyTurn) borderColor = '#6dbf6d';
-  else if (!playable && isMyTurn) borderColor = '#cccccc';
-
+// ── Composant Domino réutilisable ─────────────────────────────────────────────
+function DominoTile({ piece, w, h, pipSize, vertical=false, borderColor='#ccc', borderWidth=1.5, extraStyle={} }) {
+  const radius = Math.max(4, Math.min(w, h) * 0.12);
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      style={[styles.dominoTile, {
-        width: w, height: h,
-        borderColor,
-        opacity: (!playable && isMyTurn) ? 0.4 : 1,
-        transform: [{ translateY: selected ? -10 : 0 }],
-      }]}
-      activeOpacity={0.7}
-    >
-      <View style={styles.dominoHalf}>
-        <PipGrid value={piece[0]} size={pipSize} />
+    <View style={[{
+      width: w, height: h,
+      backgroundColor: C.domino,
+      borderRadius: radius,
+      borderWidth,
+      borderColor,
+      flexDirection: vertical ? 'column' : 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      position: 'relative',
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3,
+    }, extraStyle]}>
+      <View style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: '38%',
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        borderTopLeftRadius: radius, borderTopRightRadius: radius,
+      }}/>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <PipGrid value={piece[0]} size={pipSize}/>
       </View>
-      <View style={styles.dominoDivider} />
-      <View style={styles.dominoHalf}>
-        <PipGrid value={piece[1]} size={pipSize} />
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ─── Composant Domino (plateau) ───────────────────────────────────────────────
-function BoardDomino({ piece }) {
-  const w = 48;
-  const h = 24;
-  return (
-    <View style={[styles.boardDomino, { width: w, height: h }]}>
-      <View style={styles.boardHalf}>
-        <PipGrid value={piece[0]} size={14} />
-      </View>
-      <View style={styles.boardDividerV} />
-      <View style={styles.boardHalf}>
-        <PipGrid value={piece[1]} size={14} />
+      {vertical
+        ? <View style={{ width: '68%', height: 1.5, backgroundColor: '#bbb' }}/>
+        : <View style={{ height: '68%', width: 1.5, backgroundColor: '#bbb' }}/>
+      }
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <PipGrid value={piece[1]} size={pipSize}/>
       </View>
     </View>
   );
 }
 
-// ─── App principale ───────────────────────────────────────────────────────────
+// ── Domino dans la main ───────────────────────────────────────────────────────
+function HandDomino({ piece, playable, isMyTurn, selected, onPress }) {
+  let bc = '#ccc';
+  if (selected) bc = C.gold;
+  else if (playable && isMyTurn) bc = '#5cb85c';
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.75}>
+      <DominoTile
+        piece={piece} w={DW} h={DH} pipSize={DPIP} vertical={true}
+        borderColor={bc}
+        borderWidth={selected ? 3 : (playable && isMyTurn ? 2 : 1.5)}
+        extraStyle={{
+          opacity: (!playable && isMyTurn) ? 0.28 : 1,
+          transform: [{ translateY: selected ? -14 : 0 }],
+          elevation: selected ? 14 : 4,
+          shadowColor: selected ? C.gold : '#000',
+          shadowOpacity: selected ? 0.6 : 0.25,
+          shadowRadius: selected ? 8 : 3,
+          backgroundColor: selected ? '#fffaf0' : C.domino,
+        }}
+      />
+    </TouchableOpacity>
+  );
+}
+
+// ── Domino pioche (dos tourné) ────────────────────────────────────────────────
+function PiocheDomino({ onPress }) {
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.75}>
+      <View style={{
+        width: DW, height: DH,
+        backgroundColor: '#1a3d20',
+        borderRadius: Math.max(4, DW * 0.12),
+        borderWidth: 2, borderColor: C.gold,
+        alignItems: 'center', justifyContent: 'center',
+        elevation: 4,
+      }}>
+        <View style={{
+          width: DW * 0.6, height: DH * 0.6,
+          borderRadius: 6, borderWidth: 1.5,
+          borderColor: 'rgba(201,168,76,0.4)',
+        }}/>
+        <Text style={{ color: C.gold, fontSize: 8, marginTop: 4, letterSpacing: 1 }}>PIOCHER</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ── Domino caché adversaire ───────────────────────────────────────────────────
+function HiddenDomino({ w=15, h=28 }) {
+  return (
+    <View style={{
+      width: w, height: h,
+      backgroundColor: '#1a3d20',
+      borderRadius: 3, borderWidth: 1, borderColor: '#2e6e36',
+      marginVertical: 2,
+    }}/>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ALGORITHME SERPENT
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Principe :
+// - Le board contient les dominos dans l'ordre de pose avec leur side (left/right/center)
+// - On reconstitue l'ordre visuel : gauche → centre → droite
+// - On place les dominos en serpent : ligne horizontale, virage vertical, ligne suivante sens inverse
+//
+// Chaque tile a :
+//   x, y     : position absolue
+//   w, h     : dimensions
+//   pip      : taille des points
+//   vertical : orientation
+//   piece    : [a, b]
+//
+function buildSnake(board, bw, bh) {
+  if (!board || board.length === 0 || bw === 0 || bh === 0) return [];
+
+  const n = board.length;
+
+  // 1. Taille adaptive
+  // On estime combien de lignes on aura et ajuste la taille
+  const maxPerRow = Math.max(3, Math.floor(bw / 22));
+  const estimatedRows = Math.ceil(n / maxPerRow);
+  const maxDH = Math.floor(bh / (estimatedRows + 1));
+  const dh = Math.max(12, Math.min(30, maxDH)); // hauteur domino horizontal
+  const dw = Math.round(dh * 1.92);             // largeur domino horizontal
+  const pip = Math.max(5, Math.floor(dh * 0.7));
+
+  // 2. Reconstituer l'ordre visuel gauche→droite
+  // board[0] = centre, board[i].side = 'left' ou 'right'
+  const leftPieces  = board.filter(b => b.side === 'left').reverse();
+  const centerPiece = board[0];
+  const rightPieces = board.filter(b => b.side === 'right' && b !== board[0]);
+
+  // Séquence visuelle : gauche → centre → droite
+  const sequence = [...leftPieces, centerPiece, ...rightPieces];
+
+  // 3. Calculer le nombre de dominos par ligne
+  const perRow = Math.max(2, Math.floor(bw / dw));
+
+  // 4. Calculer la hauteur totale du serpent pour centrer verticalement
+  const numRows = Math.ceil(sequence.length / perRow);
+  const totalH  = numRows * dh;
+  const startY  = Math.max(4, Math.floor((bh - totalH) / 2));
+
+  // 5. Placer chaque domino
+  const tiles = [];
+
+  for (let i = 0; i < sequence.length; i++) {
+    const rowIdx   = Math.floor(i / perRow);
+    const posInRow = i % perRow;
+    const isEvenRow = rowIdx % 2 === 0; // true = gauche→droite, false = droite→gauche
+
+    const item = sequence[i];
+    const isDouble = item.piece[0] === item.piece[1];
+
+    let x, y, tw, th, vertical;
+
+    if (isDouble) {
+      // Double : vertical, centré sur la ligne
+      tw = dh;
+      th = dw;
+      vertical = true;
+      const colX = isEvenRow
+        ? posInRow * dw
+        : (perRow - 1 - posInRow) * dw;
+      x = colX + Math.floor((dw - dh) / 2);
+      y = startY + rowIdx * dh - Math.floor((dw - dh) / 2);
+    } else {
+      // Normal : horizontal
+      tw = dw;
+      th = dh;
+      vertical = false;
+      x = isEvenRow
+        ? posInRow * dw
+        : (perRow - 1 - posInRow) * dw;
+      y = startY + rowIdx * dh;
+    }
+
+    // Centrer horizontalement dans le plateau
+    const rowCount = Math.min(perRow, sequence.length - rowIdx * perRow);
+    const rowW = rowCount * dw;
+    const offsetX = Math.floor((bw - rowW) / 2);
+
+    tiles.push({
+      x: x + offsetX,
+      y,
+      w: tw,
+      h: th,
+      pip,
+      vertical,
+      piece: item.piece,
+    });
+  }
+
+  return tiles;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function App() {
-  const [screen, setScreen] = useState('lobby'); // lobby | waiting | game
-  const [playerName, setPlayerName] = useState('');
-  const [joinCode, setJoinCode] = useState('');
-  const [maxPlayers, setMaxPlayers] = useState(2);
-  const [error, setError] = useState('');
-  const [roomCode, setRoomCode] = useState('');
-  const [players, setPlayers] = useState([]);
-  const [me, setMe] = useState(null);
-  const [myHand, setMyHand] = useState([]);
-  const [board, setBoard] = useState([]);
-  const [boardEnds, setBoardEnds] = useState(null);
-  const [currentTurn, setCurrentTurn] = useState(null);
-  const [scores, setScores] = useState({ 0: 0, 1: 0 });
-  const [selectedIdx, setSelectedIdx] = useState(null);
-  const [handCounts, setHandCounts] = useState({});
-  const [pioireLeft, setPioireLeft] = useState(0);
-  const [toast, setToast] = useState('');
+  const [screen,       setScreen]       = useState('lobby');
+  const [playerName,   setPlayerName]   = useState('');
+  const [joinCode,     setJoinCode]     = useState('');
+  const [maxPlayers,   setMaxPlayers]   = useState(2);
+  const [error,        setError]        = useState('');
+  const [roomCode,     setRoomCode]     = useState('');
+  const [players,      setPlayers]      = useState([]);
+  const [me,           setMe]           = useState(null);
+  const [myHand,       setMyHand]       = useState([]);
+  const [board,        setBoard]        = useState([]);
+  const [boardEnds,    setBoardEnds]    = useState(null);
+  const [currentTurn,  setCurrentTurn]  = useState(null);
+  const [scores,       setScores]       = useState({ 0:0, 1:0 });
+  const [handCounts,   setHandCounts]   = useState({});
+  const [pioireLeft,   setPioireLeft]   = useState(0);
+  const [toast,        setToast]        = useState('');
   const [mancheResult, setMancheResult] = useState(null);
-  const [gameOver, setGameOver] = useState(null);
+  const [gameOver,     setGameOver]     = useState(null);
+  const [selectedIdx,  setSelectedIdx]  = useState(null);
+  const [boardSize,    setBoardSize]    = useState({ w:0, h:0 });
   const socketRef = useRef(null);
-  const boardScrollRef = useRef(null);
 
   useEffect(() => {
     const socket = io(SERVER_URL, { transports: ['websocket'] });
     socketRef.current = socket;
 
-    socket.on('room_created', ({ code, player, players: pl }) => {
-      setMe(player);
-      setPlayers(pl);
-      setRoomCode(code);
-      setScreen('waiting');
+    socket.on('room_created',  ({code,player,players:pl})=>{ setMe(player);setPlayers(pl);setRoomCode(code);setScreen('waiting'); });
+    socket.on('room_joined',   ({code,player,players:pl})=>{ setMe(player);setPlayers(pl);setRoomCode(code);setScreen('waiting'); });
+    socket.on('player_joined', ({players:pl})=>setPlayers(pl));
+    socket.on('manche_start',  ({hand,currentTurn:ct,scores:sc,board:b,boardEnds:be})=>{
+      setMyHand(hand);setCurrentTurn(ct);setScores(sc);setBoard(b||[]);setBoardEnds(be);
+      setSelectedIdx(null);setMancheResult(null);setGameOver(null);setScreen('game');
+      if(ct===socket.id) showToast('🎯 Vous commencez !');
     });
-
-    socket.on('room_joined', ({ code, player, players: pl }) => {
-      setMe(player);
-      setPlayers(pl);
-      setRoomCode(code);
-      setScreen('waiting');
+    socket.on('piece_played',  ({playerId,piece,board:b,boardEnds:be,handCounts:hc})=>{
+      setBoard(b);setBoardEnds(be);setHandCounts(hc);
+      if(playerId!==socket.id) showToast(`[${piece[0]}|${piece[1]}] joué`);
     });
-
-    socket.on('player_joined', ({ players: pl }) => setPlayers(pl));
-
-    socket.on('manche_start', ({ hand, currentTurn: ct, scores: sc, board: b, boardEnds: be }) => {
-      setMyHand(hand);
-      setCurrentTurn(ct);
-      setScores(sc);
-      setBoard(b || []);
-      setBoardEnds(be);
-      setSelectedIdx(null);
-      setMancheResult(null);
-      setGameOver(null);
-      const hc = {};
-      // init hand counts
-      setHandCounts(prev => {
-        const newHc = { ...prev };
-        return newHc;
-      });
-      setScreen('game');
-      if (ct === socket.id) showToast('🎯 Vous commencez !');
+    socket.on('hand_update',   ({hand})=>{ setMyHand(hand); setSelectedIdx(null); });
+    socket.on('turn_change',   ({currentTurn:ct,skipped})=>{
+      setCurrentTurn(ct); setSelectedIdx(null);
+      if(skipped?.length>0) showToast('Un joueur passe son tour');
     });
-
-    socket.on('piece_played', ({ playerId, piece, board: b, boardEnds: be, handCounts: hc }) => {
-      setBoard(b);
-      setBoardEnds(be);
-      setHandCounts(hc);
-      if (playerId !== socket.id) {
-        showToast(`[${piece[0]}|${piece[1]}] posé`);
-      }
-    });
-
-    socket.on('hand_update', ({ hand }) => {
-      setMyHand(hand);
-      setSelectedIdx(null);
-    });
-
-    socket.on('turn_change', ({ currentTurn: ct, skipped }) => {
-      setCurrentTurn(ct);
-      if (skipped && skipped.length > 0) showToast('Un joueur passe son tour');
-    });
-
-    socket.on('forced_pass', () => showToast('Vous passez votre tour'));
-
-    socket.on('piece_drawn', ({ hand }) => {
-      setMyHand(hand);
-      showToast('Vous avez pioché une pièce');
-    });
-
-    socket.on('draw_happened', ({ handCounts: hc, pioireLeft: pl }) => {
-      setHandCounts(hc);
-      setPioireLeft(pl);
-    });
-
-    socket.on('manche_end', ({ winTeam, points, scores: sc, hands }) => {
-      setScores(sc);
-      setMancheResult({ winTeam, points, scores: sc });
-    });
-
-    socket.on('game_over', ({ winTeam, scores: sc }) => {
-      setScores(sc);
-      setGameOver({ winTeam, scores: sc });
-    });
-
-    socket.on('player_left', ({ players: pl, msg }) => {
-      setPlayers(pl);
-      showToast(msg);
-    });
-
-    socket.on('error', ({ msg }) => setError(msg));
-
-    return () => socket.disconnect();
+    socket.on('forced_pass',   ()=>showToast('Vous passez votre tour'));
+    socket.on('piece_drawn',   ({hand})=>{ setMyHand(hand); showToast('Pièce piochée !'); });
+    socket.on('draw_happened', ({handCounts:hc,pioireLeft:pl})=>{ setHandCounts(hc);setPioireLeft(pl); });
+    socket.on('manche_end',    ({winTeam,points,scores:sc})=>{ setScores(sc);setMancheResult({winTeam,points,scores:sc}); });
+    socket.on('game_over',     ({winTeam,scores:sc})=>{ setScores(sc);setGameOver({winTeam,scores:sc}); });
+    socket.on('player_left',   ({players:pl,msg})=>{ setPlayers(pl);showToast(msg); });
+    socket.on('error',         ({msg})=>setError(msg));
+    return ()=>socket.disconnect();
   }, []);
 
-  function showToast(msg) {
-    setToast(msg);
-    setTimeout(() => setToast(''), 2500);
-  }
+  function showToast(msg) { setToast(msg); setTimeout(()=>setToast(''), 2500); }
 
   function createRoom() {
     if (!playerName.trim()) return setError('Entrez votre nom');
-    setError('');
-    socketRef.current.emit('create_room', { name: playerName.trim(), maxPlayers });
+    setError(''); socketRef.current.emit('create_room',{name:playerName.trim(),maxPlayers});
   }
-
   function joinRoom() {
     if (!playerName.trim()) return setError('Entrez votre nom');
-    if (!joinCode.trim()) return setError('Entrez un code');
-    setError('');
-    socketRef.current.emit('join_room', { name: playerName.trim(), code: joinCode.trim().toUpperCase() });
+    if (!joinCode.trim())   return setError('Entrez un code');
+    setError(''); socketRef.current.emit('join_room',{name:playerName.trim(),code:joinCode.trim().toUpperCase()});
   }
 
-  function canPlayPiece(piece) {
+  function canPlay(piece) {
     if (!boardEnds) return true;
-    return piece[0] === boardEnds.left || piece[1] === boardEnds.left ||
-           piece[0] === boardEnds.right || piece[1] === boardEnds.right;
+    return [piece[0],piece[1]].some(v=>v===boardEnds.left||v===boardEnds.right);
+  }
+  function canPlayLeft(piece) {
+    if (!boardEnds) return false;
+    return piece[0]===boardEnds.left || piece[1]===boardEnds.left;
+  }
+  function canPlayRight(piece) {
+    if (!boardEnds) return false;
+    return piece[0]===boardEnds.right || piece[1]===boardEnds.right;
   }
 
-  function playPiece(side) {
+  function handleSelect(idx) {
+    if (!isMyTurn) return showToast("Ce n'est pas votre tour");
+    const piece = myHand[idx];
+    if (!canPlay(piece)) return showToast('Pièce non jouable');
+
+    if (!boardEnds) {
+      socketRef.current.emit('play_piece',{code:roomCode,piece,side:'right'});
+      return;
+    }
+    const left  = canPlayLeft(piece);
+    const right = canPlayRight(piece);
+    if (left && !right) {
+      socketRef.current.emit('play_piece',{code:roomCode,piece,side:'left'});
+      return;
+    }
+    if (right && !left) {
+      socketRef.current.emit('play_piece',{code:roomCode,piece,side:'right'});
+      return;
+    }
+    setSelectedIdx(selectedIdx === idx ? null : idx);
+  }
+
+  function handlePlaySide(side) {
     if (selectedIdx === null) return;
-    const piece = myHand[selectedIdx];
-    socketRef.current.emit('play_piece', { code: roomCode, piece, side });
+    socketRef.current.emit('play_piece',{code:roomCode,piece:myHand[selectedIdx],side});
     setSelectedIdx(null);
   }
 
-  function drawPiece() {
-    socketRef.current.emit('draw_piece', { code: roomCode });
+  function handleDraw() {
+    socketRef.current.emit('draw_piece',{code:roomCode});
   }
 
-  const isMyTurn = socketRef.current && currentTurn === socketRef.current.id;
-  const hasPlayable = myHand.some(p => canPlayPiece(p));
+  const isMyTurn      = !!(socketRef.current && currentTurn===socketRef.current.id);
+  const hasPlayable   = myHand.some(p=>canPlay(p));
+  const needToDraw    = isMyTurn && !hasPlayable && maxPlayers===2 && pioireLeft>0;
+  const teamName      = t=>players.filter(p=>p.team===t).map(p=>p.name).join(' & ')||`Éq.${t+1}`;
+  const others        = players.filter(p=>p.id!==socketRef.current?.id);
+  const topPlayer     = others[0]||null;
+  const leftPlayer    = others[1]||null;
+  const rightPlayer   = others[2]||null;
+  const snakeTiles    = buildSnake(board, boardSize.w, boardSize.h);
+  const selectedPiece = selectedIdx !== null ? myHand[selectedIdx] : null;
+  const showLeft      = isMyTurn && selectedPiece && board.length>0 && canPlayLeft(selectedPiece);
+  const showRight     = isMyTurn && selectedPiece && board.length>0 && canPlayRight(selectedPiece);
+  const showCenter    = isMyTurn && selectedPiece && board.length===0;
 
-  function getTeamName(teamIdx) {
-    return players.filter(p => p.team === teamIdx).map(p => p.name).join(' & ') || `Équipe ${teamIdx + 1}`;
-  }
-
-  // ─── LOBBY ──────────────────────────────────────────────────────────────────
-  if (screen === 'lobby') {
-    return (
-      <SafeAreaView style={styles.lobbyContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#0f1f0f" />
-        <ScrollView contentContainerStyle={styles.lobbyScroll} keyboardShouldPersistTaps="handled">
-
-          {/* Logo */}
-          <View style={styles.logoArea}>
-            <View style={styles.dominoIcon}>
-              <PipGrid value={3} size={28} />
-              <View style={styles.iconDivider} />
-              <PipGrid value={6} size={28} />
-            </View>
-            <Text style={styles.titleMain}>DOMINO</Text>
-            <Text style={styles.titleSub}>BLOQUÉ</Text>
-            <View style={styles.statusDot}>
-              <View style={styles.greenDot} />
-              <Text style={styles.statusText}>Connecté</Text>
-            </View>
+  // ── LOBBY ──────────────────────────────────────────────────────────────────
+  if (screen==='lobby') return (
+    <View style={S.bg}>
+      <StatusBar hidden/>
+      <ScrollView contentContainerStyle={S.lobbyScroll} keyboardShouldPersistTaps="handled">
+        <View style={S.logoWrap}>
+          <DominoTile piece={[6,6]} w={52} h={100} pipSize={34} vertical={true}
+            extraStyle={{ marginBottom:16, elevation:10 }}/>
+          <Text style={S.t1}>DOMINO</Text>
+          <Text style={S.t2}>BLOQUÉ</Text>
+          <View style={S.connRow}>
+            <View style={S.connDot}/><Text style={S.connTxt}>Connecté</Text>
           </View>
+        </View>
 
-          {/* Nom */}
-          <View style={styles.card}>
-            <Text style={styles.label}>VOTRE NOM</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Entrez votre nom"
-              placeholderTextColor="#4a6e4e"
-              value={playerName}
-              onChangeText={setPlayerName}
-              maxLength={16}
-            />
-          </View>
+        <View style={S.card}>
+          <Text style={S.lbl}>VOTRE NOM</Text>
+          <TextInput style={S.inp} placeholder="Entrez votre nom" placeholderTextColor="#4a6e4e"
+            value={playerName} onChangeText={setPlayerName} maxLength={16}/>
+        </View>
 
-          {/* Mode */}
-          <View style={styles.card}>
-            <Text style={styles.label}>NOMBRE DE JOUEURS</Text>
-            <View style={styles.modeRow}>
-              <TouchableOpacity
-                style={[styles.modeBtn, maxPlayers === 2 && styles.modeBtnActive]}
-                onPress={() => setMaxPlayers(2)}
-              >
-                <Text style={[styles.modeBtnText, maxPlayers === 2 && styles.modeBtnTextActive]}>2 Joueurs</Text>
+        <View style={S.card}>
+          <Text style={S.lbl}>NOMBRE DE JOUEURS</Text>
+          <View style={{flexDirection:'row',gap:10}}>
+            {[2,4].map(n=>(
+              <TouchableOpacity key={n} style={[S.mBtn,maxPlayers===n&&S.mBtnOn]} onPress={()=>setMaxPlayers(n)}>
+                <Text style={[S.mTxt,maxPlayers===n&&S.mTxtOn]}>{n} Joueurs</Text>
+                {n===4&&<Text style={S.mSub}>Équipes</Text>}
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modeBtn, maxPlayers === 4 && styles.modeBtnActive]}
-                onPress={() => setMaxPlayers(4)}
-              >
-                <Text style={[styles.modeBtnText, maxPlayers === 4 && styles.modeBtnTextActive]}>4 Joueurs</Text>
-                <Text style={styles.modeBtnSub}>Équipes</Text>
-              </TouchableOpacity>
-            </View>
+            ))}
           </View>
+        </View>
 
-          <TouchableOpacity style={styles.btnPrimary} onPress={createRoom}>
-            <Text style={styles.btnPrimaryText}>Créer une salle privée</Text>
+        <TouchableOpacity style={S.btnGold} onPress={createRoom}>
+          <Text style={S.btnGoldTxt}>Créer une salle privée</Text>
+        </TouchableOpacity>
+
+        <View style={S.divRow}>
+          <View style={S.divLine}/><Text style={S.divTxt}>OU</Text><View style={S.divLine}/>
+        </View>
+
+        <View style={S.card}>
+          <Text style={S.lbl}>CODE DE LA SALLE</Text>
+          <TextInput style={S.inp} placeholder="Ex: ABC123" placeholderTextColor="#4a6e4e"
+            value={joinCode} onChangeText={t=>setJoinCode(t.toUpperCase())} maxLength={6} autoCapitalize="characters"/>
+          <TouchableOpacity style={[S.btnOutline,{marginTop:12}]} onPress={joinRoom}>
+            <Text style={S.btnOutlineTxt}>Rejoindre</Text>
           </TouchableOpacity>
-
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OU</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.label}>CODE DE LA SALLE</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ex: ABC123"
-              placeholderTextColor="#4a6e4e"
-              value={joinCode}
-              onChangeText={t => setJoinCode(t.toUpperCase())}
-              maxLength={6}
-              autoCapitalize="characters"
-            />
-            <TouchableOpacity style={[styles.btnOutline, { marginTop: 12 }]} onPress={joinRoom}>
-              <Text style={styles.btnOutlineText}>Rejoindre</Text>
-            </TouchableOpacity>
-          </View>
-
-          {error ? <Text style={styles.errorMsg}>{error}</Text> : null}
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // ─── WAITING ────────────────────────────────────────────────────────────────
-  if (screen === 'waiting') {
-    return (
-      <SafeAreaView style={styles.waitingContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#0f1f0f" />
-        <Text style={styles.waitingLabel}>CODE DE LA SALLE</Text>
-        <Text style={styles.codeDisplay}>{roomCode}</Text>
-        <Text style={styles.waitingHint}>Partagez ce code avec vos amis</Text>
-
-        <View style={styles.playersList}>
-          {Array.from({ length: maxPlayers }).map((_, i) => {
-            const p = players[i];
-            return (
-              <View key={i} style={[styles.playerSlot, p && styles.playerSlotFilled]}>
-                {p ? (
-                  <>
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{p.name[0].toUpperCase()}</Text>
-                    </View>
-                    <Text style={styles.playerName}>{p.name}{p.id === socketRef.current?.id ? ' (vous)' : ''}</Text>
-                    {maxPlayers === 4 && <Text style={styles.teamBadge}>ÉQ. {p.team + 1}</Text>}
-                  </>
-                ) : (
-                  <>
-                    <View style={styles.spinner} />
-                    <Text style={styles.waitingText}>En attente…</Text>
-                  </>
-                )}
-              </View>
-            );
-          })}
         </View>
-        <Text style={styles.waitingCount}>{players.length}/{maxPlayers} joueurs</Text>
-      </SafeAreaView>
-    );
-  }
-
-  // ─── GAME ───────────────────────────────────────────────────────────────────
-  return (
-    <SafeAreaView style={styles.gameContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a140a" />
-
-      {/* Scores */}
-      <View style={styles.gameHeader}>
-        <View style={styles.scoreTeam}>
-          <Text style={styles.scoreName}>{getTeamName(0)}</Text>
-          <Text style={styles.scoreVal}>{scores[0]}</Text>
-        </View>
-        <Text style={styles.scoreSep}>·</Text>
-        <View style={styles.scoreTeam}>
-          <Text style={styles.scoreName}>{getTeamName(1)}</Text>
-          <Text style={styles.scoreVal}>{scores[1]}</Text>
-        </View>
-      </View>
-
-      {/* Adversaires */}
-      <View style={styles.opponentsRow}>
-        {players.filter(p => p.id !== socketRef.current?.id).map(p => (
-          <View key={p.id} style={styles.oppPlayer}>
-            {p.id === currentTurn && <View style={styles.turnDot} />}
-            <Text style={styles.oppName}>{p.name}{maxPlayers === 4 && p.team === me?.team ? ' 🤝' : ''}</Text>
-            <Text style={styles.oppCount}>{handCounts[p.id] ?? 7} pièces</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* Message de tour */}
-      <Text style={[styles.turnMsg, { color: isMyTurn ? '#c9a84c' : '#8aad8e' }]}>
-        {isMyTurn ? '🎯 C\'EST VOTRE TOUR' : `Tour de ${players.find(x => x.id === currentTurn)?.name || '…'}`}
-      </Text>
-
-      {/* Plateau */}
-      <ScrollView
-        ref={boardScrollRef}
-        horizontal
-        style={styles.boardScroll}
-        contentContainerStyle={styles.boardInner}
-        showsHorizontalScrollIndicator={false}
-        onContentSizeChange={() => boardScrollRef.current?.scrollToEnd({ animated: true })}
-      >
-        {board.map((item, i) => (
-          <BoardDomino key={i} piece={item.piece} />
-        ))}
-        {board.length === 0 && (
-          <Text style={styles.boardEmpty}>Le plateau est vide</Text>
-        )}
+        {!!error&&<Text style={S.err}>{error}</Text>}
       </ScrollView>
+    </View>
+  );
 
-      {/* Main */}
-      <View style={styles.handArea}>
-        <Text style={styles.handLabel}>VOTRE MAIN</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.handScroll}>
-          {myHand.map((piece, i) => (
-            <DominoTile
-              key={i}
+  // ── WAITING ────────────────────────────────────────────────────────────────
+  if (screen==='waiting') return (
+    <View style={[S.bg,{alignItems:'center',justifyContent:'center',gap:14,padding:20}]}>
+      <StatusBar hidden/>
+      <Text style={S.wLbl}>CODE DE LA SALLE</Text>
+      <Text style={S.wCode}>{roomCode}</Text>
+      <Text style={S.wHint}>Partagez ce code avec vos amis</Text>
+      <View style={{width:'100%',maxWidth:360,gap:10}}>
+        {Array.from({length:maxPlayers}).map((_,i)=>{
+          const p=players[i];
+          return (
+            <View key={i} style={[S.slot,p&&S.slotOn]}>
+              {p?<>
+                <View style={S.av}><Text style={S.avTxt}>{p.name[0].toUpperCase()}</Text></View>
+                <Text style={S.pName}>{p.name}{p.id===socketRef.current?.id?' (vous)':''}</Text>
+                {maxPlayers===4&&<Text style={S.tBadge}>ÉQ. {p.team+1}</Text>}
+              </>:<>
+                <View style={S.spin}/><Text style={S.wTxt}>En attente…</Text>
+              </>}
+            </View>
+          );
+        })}
+      </View>
+      <Text style={{fontSize:13,color:C.dim}}>{players.length}/{maxPlayers} joueurs</Text>
+    </View>
+  );
+
+  // ── GAME ───────────────────────────────────────────────────────────────────
+  return (
+    <View style={S.game}>
+      <StatusBar hidden/>
+
+      {/* SCORES */}
+      <View style={S.header}>
+        <View style={S.scoreBox}>
+          <Text style={S.sLbl}>NOUS</Text>
+          <Text style={S.sVal}>{scores[me?.team??0]}<Text style={S.sMax}>/100</Text></Text>
+        </View>
+        <Text style={S.sX}>✕</Text>
+        <View style={S.scoreBox}>
+          <Text style={[S.sLbl,{color:'#e05c5c'}]}>RIVAUX</Text>
+          <Text style={[S.sVal,{color:'#e05c5c'}]}>{scores[me?.team===0?1:0]}<Text style={S.sMax}>/100</Text></Text>
+        </View>
+      </View>
+
+      {/* ADVERSAIRE HAUT */}
+      {topPlayer&&(
+        <View style={S.topOpp}>
+          <View style={S.oppAv}>
+            <Text style={S.oppAvTxt}>{topPlayer.name[0].toUpperCase()}</Text>
+            {topPlayer.id===currentTurn&&<View style={S.turnRing}/>}
+          </View>
+          <Text style={S.oppLbl}>{handCounts[topPlayer.id]??7} dominos</Text>
+          <View style={{flexDirection:'row',gap:3,marginTop:3}}>
+            {Array.from({length:Math.min(handCounts[topPlayer.id]??7,7)}).map((_,i)=>(
+              <HiddenDomino key={i} w={18} h={9}/>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* MILIEU */}
+      <View style={S.middleRow}>
+        {leftPlayer?(
+          <View style={S.sideOpp}>
+            <View style={S.sideAv}>
+              <Text style={S.sideAvTxt}>{leftPlayer.name[0].toUpperCase()}</Text>
+              {leftPlayer.id===currentTurn&&<View style={S.turnRing}/>}
+            </View>
+            <Text style={S.sideLbl}>{handCounts[leftPlayer.id]??7}{'\n'}dom.</Text>
+            {Array.from({length:Math.min(handCounts[leftPlayer.id]??7,7)}).map((_,i)=>(
+              <HiddenDomino key={i}/>
+            ))}
+          </View>
+        ):<View style={{width:36}}/>}
+
+        {/* PLATEAU */}
+        <View
+          style={S.boardArea}
+          onLayout={e=>{
+            const {width:w,height:h}=e.nativeEvent.layout;
+            setBoardSize({w,h});
+          }}
+        >
+          {/* Dominos serpent */}
+          {snakeTiles.map((tile,i)=>(
+            <View key={i} style={{position:'absolute', left:tile.x, top:tile.y}}>
+              <DominoTile
+                piece={tile.piece} w={tile.w} h={tile.h}
+                pipSize={tile.pip} vertical={tile.vertical}
+              />
+            </View>
+          ))}
+
+          {/* Plateau vide */}
+          {board.length===0 && !selectedPiece && (
+            <View style={S.emptyBoard}>
+              <Text style={S.emptyTxt}>{'Appuyez sur un domino\npuis posez-le ici'}</Text>
+            </View>
+          )}
+
+          {/* Zone centre premier coup */}
+          {showCenter && (
+            <TouchableOpacity style={S.zoneCenter} onPress={()=>handlePlaySide('right')} activeOpacity={0.75}>
+              <Text style={S.zoneCenterTxt}>✓ Poser ici</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Zones gauche/droite uniquement si jouable */}
+          {showLeft && (
+            <TouchableOpacity style={S.zoneLeft} onPress={()=>handlePlaySide('left')} activeOpacity={0.75}>
+              <Text style={S.zoneTxt}>◀</Text>
+              <Text style={S.zoneNum}>{boardEnds?.left}</Text>
+            </TouchableOpacity>
+          )}
+          {showRight && (
+            <TouchableOpacity style={S.zoneRight} onPress={()=>handlePlaySide('right')} activeOpacity={0.75}>
+              <Text style={S.zoneNum}>{boardEnds?.right}</Text>
+              <Text style={S.zoneTxt}>▶</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {rightPlayer?(
+          <View style={S.sideOpp}>
+            {Array.from({length:Math.min(handCounts[rightPlayer.id]??7,7)}).map((_,i)=>(
+              <HiddenDomino key={i}/>
+            ))}
+            <Text style={S.sideLbl}>{handCounts[rightPlayer.id]??7}{'\n'}dom.</Text>
+            <View style={S.sideAv}>
+              <Text style={S.sideAvTxt}>{rightPlayer.name[0].toUpperCase()}</Text>
+              {rightPlayer.id===currentTurn&&<View style={S.turnRing}/>}
+            </View>
+          </View>
+        ):<View style={{width:36}}/>}
+      </View>
+
+      {/* MAIN */}
+      <View style={S.handArea}>
+        <View style={S.handHeader}>
+          <View style={S.myAv}>
+            <Text style={S.myAvTxt}>{me?.name?.[0]?.toUpperCase()||'M'}</Text>
+            {isMyTurn&&<View style={S.turnRing}/>}
+          </View>
+          <Text style={S.handInfo} numberOfLines={1}>
+            {needToDraw
+              ? '🂠 Pioche un domino'
+              : isMyTurn
+                ? selectedIdx!==null ? 'Choisissez un côté ⬆' : '🎯 Appuyez sur un domino'
+                : `Tour de ${players.find(x=>x.id===currentTurn)?.name||'…'}`}
+          </Text>
+          {selectedIdx!==null&&(
+            <TouchableOpacity style={S.btnCancel} onPress={()=>setSelectedIdx(null)}>
+              <Text style={S.btnCancelTxt}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Dominos + pioche si nécessaire */}
+        <View style={S.handRow}>
+          {myHand.map((piece,i)=>(
+            <HandDomino
+              key={`${i}-${piece[0]}-${piece[1]}`}
               piece={piece}
-              selected={selectedIdx === i}
-              playable={canPlayPiece(piece)}
-              isMyTurn={isMyTurn}
-              onPress={() => {
-                if (!isMyTurn) return showToast("Ce n'est pas votre tour");
-                if (!canPlayPiece(piece)) return showToast("Pièce non jouable");
-                setSelectedIdx(selectedIdx === i ? null : i);
-              }}
+              playable={canPlay(piece)}
+              isMyTurn={isMyTurn && !needToDraw}
+              selected={selectedIdx===i}
+              onPress={()=>handleSelect(i)}
             />
           ))}
-        </ScrollView>
-
-        {/* Boutons */}
-        <View style={styles.controls}>
-          {isMyTurn && selectedIdx !== null && boardEnds && (
-            <>
-              <TouchableOpacity style={styles.btnLeft} onPress={() => playPiece('left')}>
-                <Text style={styles.btnPlayText}>◀ [{boardEnds.left}]</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.btnRight} onPress={() => playPiece('right')}>
-                <Text style={styles.btnPlayText}>[{boardEnds.right}] ▶</Text>
-              </TouchableOpacity>
-            </>
-          )}
-          {isMyTurn && selectedIdx !== null && !boardEnds && (
-            <TouchableOpacity style={styles.btnRight} onPress={() => playPiece('right')}>
-              <Text style={styles.btnPlayText}>▶ Jouer</Text>
-            </TouchableOpacity>
-          )}
-          {isMyTurn && !hasPlayable && maxPlayers === 2 && pioireLeft > 0 && (
-            <TouchableOpacity style={styles.btnDraw} onPress={drawPiece}>
-              <Text style={styles.btnPlayText}>🂠 Piocher ({pioireLeft})</Text>
-            </TouchableOpacity>
-          )}
+          {/* Pioche : dominos dos tourné */}
+          {needToDraw && Array.from({length: Math.min(pioireLeft, 3)}).map((_,i)=>(
+            <PiocheDomino key={`pioche-${i}`} onPress={handleDraw}/>
+          ))}
         </View>
       </View>
 
-      {/* Toast */}
-      {toast ? (
-        <View style={styles.toast}>
-          <Text style={styles.toastText}>{toast}</Text>
-        </View>
-      ) : null}
+      {!!toast&&<View style={S.toast}><Text style={S.toastTxt}>{toast}</Text></View>}
 
-      {/* Overlay fin de manche */}
-      {mancheResult && !gameOver && (
-        <View style={styles.overlay}>
-          <View style={styles.overlayCard}>
-            <Text style={styles.overlayTitle}>
-              {mancheResult.winTeam === me?.team ? '🎉 Votre équipe gagne !' : mancheResult.winTeam === -1 ? 'Égalité !' : '😔 Équipe adverse gagne'}
-            </Text>
-            <Text style={styles.overlayPoints}>+{mancheResult.points} points</Text>
-            <View style={styles.overlayScores}>
-              <View style={styles.ovTeam}>
-                <Text style={styles.ovTeamName}>{getTeamName(0)}</Text>
-                <Text style={styles.ovTeamVal}>{mancheResult.scores[0]}</Text>
-              </View>
-              <View style={styles.ovTeam}>
-                <Text style={styles.ovTeamName}>{getTeamName(1)}</Text>
-                <Text style={styles.ovTeamVal}>{mancheResult.scores[1]}</Text>
-              </View>
+      {mancheResult&&!gameOver&&(
+        <View style={S.overlay}>
+          <View style={S.ovCard}>
+            <Text style={S.ovTitle}>{mancheResult.winTeam===me?.team?'🎉 Votre équipe gagne !':mancheResult.winTeam===-1?'Égalité !':'😔 Équipe adverse gagne'}</Text>
+            <Text style={S.ovPts}>+{mancheResult.points} points</Text>
+            <View style={S.ovScores}>
+              {[0,1].map(t=>(
+                <View key={t} style={{alignItems:'center'}}>
+                  <Text style={S.ovTN}>{teamName(t)}</Text>
+                  <Text style={S.ovTV}>{mancheResult.scores[t]}</Text>
+                </View>
+              ))}
             </View>
-            <Text style={styles.overlayHint}>Prochaine manche dans quelques secondes…</Text>
+            <Text style={S.ovHint}>Prochaine manche dans quelques secondes…</Text>
           </View>
         </View>
       )}
 
-      {/* Overlay fin de partie */}
-      {gameOver && (
-        <View style={styles.overlay}>
-          <View style={styles.overlayCard}>
-            <Text style={styles.overlayTitle}>
-              {gameOver.winTeam === me?.team ? '🏆 VICTOIRE !' : '💀 DÉFAITE'}
-            </Text>
-            <Text style={styles.overlayPoints}>
-              {gameOver.winTeam === me?.team ? 'Félicitations !' : "L'équipe adverse a gagné"}
-            </Text>
-            <View style={styles.overlayScores}>
-              <View style={styles.ovTeam}>
-                <Text style={styles.ovTeamName}>{getTeamName(0)}</Text>
-                <Text style={styles.ovTeamVal}>{gameOver.scores[0]}</Text>
-              </View>
-              <View style={styles.ovTeam}>
-                <Text style={styles.ovTeamName}>{getTeamName(1)}</Text>
-                <Text style={styles.ovTeamVal}>{gameOver.scores[1]}</Text>
-              </View>
+      {gameOver&&(
+        <View style={S.overlay}>
+          <View style={S.ovCard}>
+            <Text style={S.ovTitle}>{gameOver.winTeam===me?.team?'🏆 VICTOIRE !':'💀 DÉFAITE'}</Text>
+            <Text style={S.ovPts}>{gameOver.winTeam===me?.team?'Félicitations !':"L'équipe adverse a gagné"}</Text>
+            <View style={S.ovScores}>
+              {[0,1].map(t=>(
+                <View key={t} style={{alignItems:'center'}}>
+                  <Text style={S.ovTN}>{teamName(t)}</Text>
+                  <Text style={S.ovTV}>{gameOver.scores[t]}</Text>
+                </View>
+              ))}
             </View>
-            <TouchableOpacity style={[styles.btnPrimary, { marginTop: 16 }]} onPress={() => setScreen('lobby')}>
-              <Text style={styles.btnPrimaryText}>Nouvelle partie</Text>
+            <TouchableOpacity style={[S.btnGold,{marginTop:16,width:'100%'}]} onPress={()=>setScreen('lobby')}>
+              <Text style={S.btnGoldTxt}>Nouvelle partie</Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const C = {
-  bg: '#0f1f0f', felt: '#163a1c', felt2: '#1a4520',
-  gold: '#c9a84c', gold2: '#e8c96d', border: '#2e5c34',
-  text: '#e8e0cc', dim: '#8aad8e', domino: '#f5f0e8', dot: '#1a1a1a',
-};
-
-const styles = StyleSheet.create({
-  // LOBBY
-  lobbyContainer: { flex: 1, backgroundColor: C.bg },
-  lobbyScroll: { padding: 20, paddingBottom: 40, alignItems: 'center' },
-  logoArea: { alignItems: 'center', marginBottom: 20, marginTop: 10 },
-  dominoIcon: {
-    width: 48, height: 90, backgroundColor: C.domino,
-    borderRadius: 8, borderWidth: 2, borderColor: '#ccc',
-    alignItems: 'center', justifyContent: 'space-around',
-    padding: 8, marginBottom: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 8,
-    elevation: 8,
-  },
-  iconDivider: { width: '80%', height: 1.5, backgroundColor: '#aaa' },
-  titleMain: { fontFamily: undefined, fontSize: 42, fontWeight: '900', color: '#fff', letterSpacing: 3 },
-  titleSub: { fontSize: 20, fontWeight: '700', color: C.gold, letterSpacing: 8, marginTop: 2 },
-  statusDot: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  greenDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4caf50' },
-  statusText: { fontSize: 12, color: C.dim },
-  card: {
-    width: '100%', maxWidth: 400,
-    backgroundColor: 'rgba(26,69,32,0.5)',
-    borderWidth: 1, borderColor: C.border, borderRadius: 16,
-    padding: 16, marginBottom: 12,
-  },
-  label: { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: C.dim, marginBottom: 8, textTransform: 'uppercase' },
-  input: {
-    height: 48, backgroundColor: 'rgba(15,40,18,0.8)',
-    borderWidth: 1, borderColor: C.border, borderRadius: 10,
-    color: C.text, fontSize: 15, paddingHorizontal: 16,
-  },
-  modeRow: { flexDirection: 'row', gap: 10 },
-  modeBtn: {
-    flex: 1, height: 60, backgroundColor: 'rgba(15,40,18,0.6)',
-    borderWidth: 2, borderColor: C.border, borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  modeBtnActive: { borderColor: C.gold, backgroundColor: 'rgba(201,168,76,0.15)' },
-  modeBtnText: { fontSize: 14, fontWeight: '700', color: C.dim },
-  modeBtnTextActive: { color: C.text },
-  modeBtnSub: { fontSize: 10, color: C.gold, fontWeight: '600', letterSpacing: 1 },
-  btnPrimary: {
-    width: '100%', maxWidth: 400, height: 48,
-    backgroundColor: C.gold, borderRadius: 24,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 12,
-    shadowColor: C.gold, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
-  },
-  btnPrimaryText: { fontSize: 15, fontWeight: '700', color: '#1a1200', letterSpacing: 1 },
-  btnOutline: {
-    height: 48, borderWidth: 1, borderColor: C.gold, borderRadius: 24,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  btnOutlineText: { fontSize: 15, fontWeight: '600', color: C.gold },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4, width: '100%', maxWidth: 400 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
-  dividerText: { fontSize: 12, color: C.dim, letterSpacing: 2 },
-  errorMsg: { color: '#c0392b', fontSize: 13, marginTop: 4 },
-
-  // WAITING
-  waitingContainer: { flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center', padding: 20, gap: 12 },
-  waitingLabel: { fontSize: 12, letterSpacing: 3, color: C.dim, fontWeight: '700' },
-  codeDisplay: { fontSize: 52, fontWeight: '900', color: C.gold, letterSpacing: 12 },
-  waitingHint: { fontSize: 12, color: C.dim, marginBottom: 8 },
-  playersList: { width: '100%', maxWidth: 360, gap: 10 },
-  playerSlot: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: 'rgba(26,69,32,0.4)',
-    borderWidth: 1, borderColor: C.border, borderRadius: 12, height: 50, paddingHorizontal: 16,
-  },
-  playerSlotFilled: { borderColor: C.gold },
-  avatar: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: { fontWeight: '700', fontSize: 14, color: '#1a1200' },
-  playerName: { fontWeight: '600', fontSize: 14, color: C.text, flex: 1 },
-  teamBadge: { fontSize: 10, color: C.gold, fontWeight: '700', letterSpacing: 1 },
-  spinner: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: C.border, borderTopColor: C.gold },
-  waitingText: { color: C.dim, fontSize: 13 },
-  waitingCount: { fontSize: 13, color: C.dim },
-
-  // GAME
-  gameContainer: { flex: 1, backgroundColor: C.felt },
-  gameHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 8, paddingHorizontal: 12,
-    backgroundColor: 'rgba(10,20,10,0.7)',
-    borderBottomWidth: 1, borderBottomColor: C.border,
-  },
-  scoreTeam: { flex: 1, alignItems: 'center' },
-  scoreName: { fontSize: 10, letterSpacing: 1.5, color: C.dim, fontWeight: '600' },
-  scoreVal: { fontSize: 28, fontWeight: '900', color: C.gold, lineHeight: 32 },
-  scoreSep: { fontSize: 22, color: C.border },
-  opponentsRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 6, paddingHorizontal: 12 },
-  oppPlayer: { alignItems: 'center', gap: 2 },
-  oppName: { fontSize: 11, color: C.dim, fontWeight: '600' },
-  oppCount: { fontSize: 13, fontWeight: '700', color: C.text },
-  turnDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.gold, position: 'absolute', top: -4 },
-  turnMsg: { textAlign: 'center', fontSize: 12, letterSpacing: 1.5, fontWeight: '600', paddingVertical: 4 },
-  boardScroll: { flex: 1, backgroundColor: 'transparent' },
-  boardInner: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, gap: 3, minWidth: '100%' },
-  boardEmpty: { color: C.dim, fontSize: 13, letterSpacing: 1, opacity: 0.5 },
-
-  // Domino plateau
-  boardDomino: {
-    backgroundColor: C.domino, borderRadius: 4,
-    borderWidth: 1.5, borderColor: '#bbb',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 4,
-  },
-  boardHalf: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  boardDividerV: { width: 1.5, height: '60%', backgroundColor: '#aaa' },
-
-  // Domino main
-  dominoTile: {
-    backgroundColor: C.domino, borderRadius: 8,
-    borderWidth: 2, flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center',
-    marginHorizontal: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.5, shadowRadius: 6, elevation: 6,
-    paddingVertical: 4,
-  },
-  dominoHalf: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' },
-  dominoDivider: { width: '70%', height: 1.5, backgroundColor: '#aaa', marginVertical: 2 },
-
-  // Hand area
-  handArea: {
-    backgroundColor: 'rgba(10,20,10,0.6)',
-    borderTopWidth: 1, borderTopColor: C.border,
-    paddingTop: 8, paddingBottom: 12,
-  },
-  handLabel: { fontSize: 10, letterSpacing: 2, color: C.dim, fontWeight: '600', textAlign: 'center', marginBottom: 6 },
-  handScroll: { paddingHorizontal: 8, paddingVertical: 4, gap: 4, minHeight: 90 },
-  controls: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingHorizontal: 12, paddingTop: 8 },
-  btnLeft: {
-    flex: 1, maxWidth: 140, height: 38,
-    backgroundColor: C.gold, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  btnRight: {
-    flex: 1, maxWidth: 140, height: 38,
-    backgroundColor: C.gold, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  btnDraw: {
-    flex: 1, maxWidth: 160, height: 38,
-    backgroundColor: '#2e7d32', borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  btnPlayText: { fontSize: 13, fontWeight: '700', color: '#1a1200' },
-
-  // Toast
-  toast: {
-    position: 'absolute', bottom: 120, alignSelf: 'center',
-    backgroundColor: 'rgba(26,69,32,0.95)',
-    borderWidth: 1, borderColor: C.gold,
-    borderRadius: 20, paddingVertical: 10, paddingHorizontal: 20,
-  },
-  toastText: { fontSize: 13, fontWeight: '600', color: C.text },
-
-  // Overlay
-  overlay: {
-    position: 'absolute', inset: 0, top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    alignItems: 'center', justifyContent: 'center', padding: 20,
-  },
-  overlayCard: {
-    backgroundColor: C.felt, borderWidth: 1, borderColor: C.gold,
-    borderRadius: 20, padding: 28, width: '100%', maxWidth: 340,
-    alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.8, shadowRadius: 30, elevation: 20,
-  },
-  overlayTitle: { fontSize: 24, fontWeight: '900', color: C.gold, marginBottom: 6, textAlign: 'center' },
-  overlayPoints: { fontSize: 14, color: C.dim, marginBottom: 16 },
-  overlayScores: { flexDirection: 'row', gap: 40, marginBottom: 16 },
-  ovTeam: { alignItems: 'center' },
-  ovTeamName: { fontSize: 11, letterSpacing: 1.5, color: C.dim, marginBottom: 4 },
-  ovTeamVal: { fontSize: 40, fontWeight: '900', color: C.gold, lineHeight: 44 },
-  overlayHint: { fontSize: 12, color: C.dim, textAlign: 'center' },
+const S = StyleSheet.create({
+  bg:          { flex:1, backgroundColor:C.bg },
+  lobbyScroll: { padding:20, paddingBottom:40, alignItems:'center' },
+  logoWrap:    { alignItems:'center', marginBottom:20, marginTop:16 },
+  t1: { fontSize:44, fontWeight:'900', color:'#fff', letterSpacing:4 },
+  t2: { fontSize:20, fontWeight:'700', color:C.gold, letterSpacing:10, marginTop:2 },
+  connRow: { flexDirection:'row', alignItems:'center', gap:6, marginTop:8 },
+  connDot: { width:8, height:8, borderRadius:4, backgroundColor:'#4caf50' },
+  connTxt: { fontSize:12, color:C.dim },
+  card:    { width:'100%', maxWidth:400, backgroundColor:'rgba(26,69,32,0.5)', borderWidth:1, borderColor:C.border, borderRadius:16, padding:16, marginBottom:12 },
+  lbl:     { fontSize:11, fontWeight:'700', letterSpacing:2, color:C.dim, marginBottom:8, textTransform:'uppercase' },
+  inp:     { height:48, backgroundColor:'rgba(15,40,18,0.8)', borderWidth:1, borderColor:C.border, borderRadius:10, color:C.text, fontSize:15, paddingHorizontal:16 },
+  mBtn:    { flex:1, height:58, backgroundColor:'rgba(15,40,18,0.6)', borderWidth:2, borderColor:C.border, borderRadius:12, alignItems:'center', justifyContent:'center' },
+  mBtnOn:  { borderColor:C.gold, backgroundColor:'rgba(201,168,76,0.15)' },
+  mTxt:    { fontSize:14, fontWeight:'700', color:C.dim },
+  mTxtOn:  { color:C.text },
+  mSub:    { fontSize:10, color:C.gold, fontWeight:'600', letterSpacing:1 },
+  btnGold:    { width:'100%', maxWidth:400, height:50, backgroundColor:C.gold, borderRadius:25, alignItems:'center', justifyContent:'center', marginBottom:12, elevation:6 },
+  btnGoldTxt: { fontSize:15, fontWeight:'700', color:'#1a1200', letterSpacing:1 },
+  btnOutline:    { height:48, borderWidth:1, borderColor:C.gold, borderRadius:24, alignItems:'center', justifyContent:'center' },
+  btnOutlineTxt: { fontSize:15, fontWeight:'600', color:C.gold },
+  divRow:  { flexDirection:'row', alignItems:'center', gap:12, marginVertical:4, width:'100%', maxWidth:400 },
+  divLine: { flex:1, height:1, backgroundColor:C.border },
+  divTxt:  { fontSize:12, color:C.dim, letterSpacing:2 },
+  err:     { color:'#c0392b', fontSize:13, marginTop:4 },
+  wLbl:  { fontSize:12, letterSpacing:3, color:C.dim, fontWeight:'700' },
+  wCode: { fontSize:52, fontWeight:'900', color:C.gold, letterSpacing:12 },
+  wHint: { fontSize:12, color:C.dim },
+  slot:  { flexDirection:'row', alignItems:'center', gap:12, backgroundColor:'rgba(26,69,32,0.4)', borderWidth:1, borderColor:C.border, borderRadius:12, height:50, paddingHorizontal:16 },
+  slotOn:{ borderColor:C.gold },
+  av:    { width:32, height:32, borderRadius:16, backgroundColor:C.gold, alignItems:'center', justifyContent:'center' },
+  avTxt: { fontWeight:'700', fontSize:14, color:'#1a1200' },
+  pName: { fontWeight:'600', fontSize:14, color:C.text, flex:1 },
+  tBadge:{ fontSize:10, color:C.gold, fontWeight:'700', letterSpacing:1 },
+  spin:  { width:20, height:20, borderRadius:10, borderWidth:2, borderColor:C.border, borderTopColor:C.gold },
+  wTxt:  { color:C.dim, fontSize:13 },
+  game:   { flex:1, backgroundColor:C.felt },
+  header: { flexDirection:'row', alignItems:'center', paddingVertical:10, paddingHorizontal:16, backgroundColor:'rgba(8,18,8,0.85)', borderBottomWidth:1, borderBottomColor:C.border },
+  scoreBox: { flex:1, alignItems:'center' },
+  sLbl: { fontSize:13, fontWeight:'800', color:C.gold, letterSpacing:2 },
+  sVal: { fontSize:26, fontWeight:'900', color:C.gold },
+  sMax: { fontSize:14, color:C.dim },
+  sX:   { fontSize:22, color:C.gold, paddingHorizontal:10 },
+  topOpp:   { alignItems:'center', paddingVertical:5, borderBottomWidth:1, borderBottomColor:'rgba(46,92,52,0.3)' },
+  oppAv:    { width:32, height:32, borderRadius:16, backgroundColor:'rgba(201,168,76,0.2)', borderWidth:2, borderColor:C.gold, alignItems:'center', justifyContent:'center', position:'relative' },
+  oppAvTxt: { fontSize:12, fontWeight:'700', color:C.gold },
+  oppLbl:   { fontSize:10, color:C.dim, marginTop:2 },
+  turnRing: { position:'absolute', top:-3, left:-3, right:-3, bottom:-3, borderRadius:999, borderWidth:2.5, borderColor:C.gold },
+  middleRow: { flex:1, flexDirection:'row' },
+  sideOpp:   { width:40, alignItems:'center', justifyContent:'center', gap:2, paddingVertical:6, backgroundColor:'rgba(8,18,8,0.15)' },
+  sideAv:    { width:26, height:26, borderRadius:13, backgroundColor:'rgba(201,168,76,0.2)', borderWidth:1.5, borderColor:C.gold, alignItems:'center', justifyContent:'center', position:'relative' },
+  sideAvTxt: { fontSize:10, fontWeight:'700', color:C.gold },
+  sideLbl:   { fontSize:8, color:C.dim, textAlign:'center' },
+  boardArea: { flex:1, position:'relative', overflow:'hidden', backgroundColor:'rgba(18,50,22,0.3)', margin:4, borderRadius:8 },
+  emptyBoard:{ flex:1, alignItems:'center', justifyContent:'center' },
+  emptyTxt:  { color:C.dim, fontSize:12, textAlign:'center', opacity:0.55, lineHeight:20 },
+  zoneLeft:   { position:'absolute', left:0, top:0, bottom:0, width:'35%', backgroundColor:'rgba(201,168,76,0.2)', borderRightWidth:1, borderRightColor:'rgba(201,168,76,0.4)', alignItems:'center', justifyContent:'center', gap:4, zIndex:10 },
+  zoneRight:  { position:'absolute', right:0, top:0, bottom:0, width:'35%', backgroundColor:'rgba(201,168,76,0.2)', borderLeftWidth:1, borderLeftColor:'rgba(201,168,76,0.4)', alignItems:'center', justifyContent:'center', gap:4, zIndex:10 },
+  zoneTxt:    { fontSize:22, fontWeight:'900', color:C.gold },
+  zoneNum:    { fontSize:26, fontWeight:'900', color:C.gold },
+  zoneCenter: { position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'rgba(201,168,76,0.15)', alignItems:'center', justifyContent:'center', zIndex:10 },
+  zoneCenterTxt: { fontSize:20, fontWeight:'900', color:C.gold },
+  handArea:   { backgroundColor:'rgba(8,16,8,0.88)', borderTopWidth:1, borderTopColor:C.border, paddingTop:8, paddingBottom:14 },
+  handHeader: { flexDirection:'row', alignItems:'center', gap:8, paddingHorizontal:12, marginBottom:8 },
+  myAv:       { width:30, height:30, borderRadius:15, backgroundColor:'rgba(201,168,76,0.25)', borderWidth:2, borderColor:C.gold, alignItems:'center', justifyContent:'center', position:'relative' },
+  myAvTxt:    { fontSize:12, fontWeight:'700', color:C.gold },
+  handInfo:   { flex:1, fontSize:10, color:C.text, fontWeight:'600' },
+  btnCancel:  { width:32, height:32, borderRadius:16, backgroundColor:'rgba(200,60,60,0.3)', borderWidth:1, borderColor:'#e05c5c', alignItems:'center', justifyContent:'center' },
+  btnCancelTxt: { fontSize:16, fontWeight:'900', color:'#e05c5c' },
+  handRow:    { flexDirection:'row', justifyContent:'center', alignItems:'flex-end', paddingHorizontal:H_PAD, gap:GAP, flexWrap:'wrap' },
+  toast:    { position:'absolute', bottom:145, alignSelf:'center', backgroundColor:'rgba(20,50,22,0.96)', borderWidth:1, borderColor:C.gold, borderRadius:20, paddingVertical:10, paddingHorizontal:20, zIndex:50 },
+  toastTxt: { fontSize:13, fontWeight:'600', color:C.text },
+  overlay:  { position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'rgba(0,0,0,0.78)', alignItems:'center', justifyContent:'center', padding:20, zIndex:100 },
+  ovCard:   { backgroundColor:C.felt, borderWidth:1, borderColor:C.gold, borderRadius:20, padding:28, width:'100%', maxWidth:340, alignItems:'center', elevation:20 },
+  ovTitle:  { fontSize:22, fontWeight:'900', color:C.gold, marginBottom:6, textAlign:'center' },
+  ovPts:    { fontSize:14, color:C.dim, marginBottom:16 },
+  ovScores: { flexDirection:'row', gap:40, marginBottom:16 },
+  ovTN:     { fontSize:11, letterSpacing:1.5, color:C.dim, marginBottom:4 },
+  ovTV:     { fontSize:42, fontWeight:'900', color:C.gold, lineHeight:46 },
+  ovHint:   { fontSize:12, color:C.dim, textAlign:'center' },
 });
