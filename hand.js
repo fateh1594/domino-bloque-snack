@@ -145,11 +145,8 @@ export function HandArea({
             onPress={() => onSelect(i)}
           />
         ))}
-        {needToDraw && (
-          <PiocheDomino
-            onPress={onDraw}
-            count={pioireLeft}
-          />
+        {needToDraw && pioireLeft > 0 && (
+          <PiocheDomino onPress={onDraw} count={pioireLeft} />
         )}
       </View>
     </View>
