@@ -1,73 +1,51 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, SafeAreaView, StatusBar } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, Text } from 'react-native';
 import { BoardArea } from './board';
 import { HandArea } from './hand';
 import { C } from './domino';
 
-// Note: Importe ici ton écran d'accueil sublime (Home.js par exemple)
-// import HomeScreen from './HomeScreen'; 
-
 export default function App() {
-  const [gameState, setGameState] = useState('GAME'); // 'HOME' ou 'GAME'
-  const [board, setBoard] = useState([]);
-  const [myHand, setMyHand] = useState([[6,6], [6,5], [1,2], [3,3], [0,0]]);
+  const [screen, setScreen] = useState('HOME'); 
+  const [board, setBoard] = useState([]); 
+  const [myHand, setMyHand] = useState([[6,6], [6,1], [4,3], [2,2], [5,0]]);
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [boardSize, setBoardSize] = useState({ w: 0, h: 0 });
-
-  // Simulation d'un tour
-  const isMyTurn = true;
-
-  const handleLayout = (e) => {
-    const { width, height } = e.nativeEvent.layout;
-    setBoardSize({ w: width, h: height });
-  };
-
-  const onSelectPiece = (index) => {
-    setSelectedIdx(index === selectedIdx ? null : index);
-  };
-
-  const canPlay = (piece) => {
-    // Logique de validation simple (à lier avec ton server.js)
-    return true; 
-  };
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
-      
-      {gameState === 'GAME' ? (
+
+      {screen === 'HOME' ? (
+        <View style={styles.homeContainer}>
+          {/* COLLE TON DESIGN D'ACCUEIL SUBLIME ICI */}
+          <Text style={{color: C.gold, fontSize: 30, marginBottom: 40}}>DOMINO ROYAL</Text>
+          <TouchableOpacity style={styles.playBtn} onPress={() => setScreen('GAME')}>
+            <Text style={styles.playText}>COMMENCER</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
         <View style={styles.gameContainer}>
-          {/* ZONE DE JEU (PLATEAU) */}
           <BoardArea 
             board={board} 
             boardSize={boardSize} 
-            onLayout={handleLayout} 
+            onLayout={(e) => setBoardSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })} 
           />
-
-          {/* ZONE INTERACTIVE (MAIN DU JOUEUR) */}
           <HandArea 
             myHand={myHand}
-            isMyTurn={isMyTurn}
+            isMyTurn={true}
             selectedIdx={selectedIdx}
-            onSelect={onSelectPiece}
-            canPlay={canPlay}
+            onSelect={(idx) => setSelectedIdx(idx)}
           />
         </View>
-      ) : (
-        /* Ton écran d'accueil sublime reste ici */
-        <View style={{flex: 1, backgroundColor: C.bg}} /> 
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  gameContainer: {
-    flex: 1,
-    backgroundColor: '#0f1f0f', // Le vert "Felt" de ta palette
-  }
+  safe: { flex: 1, backgroundColor: '#000' },
+  homeContainer: { flex: 1, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center' },
+  gameContainer: { flex: 1, backgroundColor: C.bg },
+  playBtn: { padding: 20, borderColor: C.gold, borderWidth: 2, borderRadius: 10 },
+  playText: { color: C.gold, fontWeight: 'bold', fontSize: 20 }
 });
