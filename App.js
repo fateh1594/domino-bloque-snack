@@ -1,165 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Dimensions, StatusBar, ScrollView
+  StyleSheet, Dimensions, StatusBar, ScrollView,
 } from 'react-native';
 import { io } from 'socket.io-client';
 
+import { DominoFace, C, HPAD, HGAP } from './domino';
+import { HandArea }                    from './hand';
+import { BoardArea, TopOpponent, SideOpponent } from './board';
+
 const SERVER_URL = 'https://domino-bloque.onrender.com';
-const { width, height } = Dimensions.get('window');
-
-// ── Palette ───────────────────────────────────────────────────────────────────
-const C = {
-  bg:     '#0f1f0f',
-  felt:   '#163a1c',
-  gold:   '#c9a84c',
-  border: '#2e5c34',
-  text:   '#e8e0cc',
-  dim:    '#8aad8e',
-  domino: '#f5f2ec',
-  dot:    '#1a1a2e',
-  red:    '#e05c5c',
-  green:  '#5cb85c',
-};
-
-// ── Points ────────────────────────────────────────────────────────────────────
-// ── Positions des points (proportionnelles) ─────────────────────────────────
-const DOT_POSITIONS = {
-  0: [],
-  1: [[0.5,  0.5]],
-  2: [[0.25, 0.25], [0.75, 0.75]],
-  3: [[0.25, 0.25], [0.5,  0.5],  [0.75, 0.75]],
-  4: [[0.25, 0.25], [0.25, 0.75], [0.75, 0.25], [0.75, 0.75]],
-  5: [[0.25, 0.25], [0.25, 0.75], [0.5,  0.5],  [0.75, 0.25], [0.75, 0.75]],
-  6: [[0.25, 0.17], [0.25, 0.5],  [0.25, 0.83], [0.75, 0.17], [0.75, 0.5],  [0.75, 0.83]],
-};
-
-function renderDots(num, areaW, areaH) {
-  const positions = DOT_POSITIONS[num] || [];
-  const dotR = Math.max(2.5, Math.min(areaW, areaH) * 0.1);
-  return positions.map(([px, py], i) => (
-    <View key={i} style={{
-      position: 'absolute',
-      width: dotR * 2, height: dotR * 2,
-      borderRadius: dotR,
-      backgroundColor: '#1a1a2e',
-      left: px * areaW - dotR,
-      top:  py * areaH - dotR,
-    }} />
-  ));
-}
-
-// ── Composant Domino ──────────────────────────────────────────────────────────
-function DominoFace({ a, b, w, h, vertical, borderColor='#ccc', borderWidth=1.5, extraStyle={} }) {
-  const radius = Math.max(6, Math.min(w, h) * 0.15);
-  const areaW  = vertical ? w      : w / 2;
-  const areaH  = vertical ? h / 2  : h;
-  return (
-    <View style={[{
-      width: w, height: h,
-      backgroundColor: '#ffffff',
-      borderRadius: radius,
-      borderWidth, borderColor,
-      flexDirection: vertical ? 'column' : 'row',
-      overflow: 'hidden', position: 'relative',
-      elevation: 6,
-      shadowColor: '#000',
-      shadowOffset: { width: 2, height: 2 },
-      shadowOpacity: 0.3, shadowRadius: 3,
-    }, extraStyle]}>
-      <View style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: '45%',
-        backgroundColor: 'rgba(255,255,255,0.45)',
-        borderTopLeftRadius: radius, borderTopRightRadius: radius,
-      }} />
-      <View style={{ width: areaW, height: areaH, position: 'relative' }}>
-        {renderDots(a, areaW, areaH)}
-      </View>
-      {vertical
-        ? <View style={{ width: '80%', height: 1.5, backgroundColor: '#888', alignSelf: 'center' }} />
-        : <View style={{ width: 1.5, height: '80%', backgroundColor: '#888', alignSelf: 'center' }} />
-      }
-      <View style={{ width: areaW, height: areaH, position: 'relative' }}>
-        {renderDots(b, areaW, areaH)}
-      </View>
-    </View>
-  );
-}
-
-// ── Tailles domino main ───────────────────────────────────────────────────────
-const HPAD = 8;
-const HGAP = 5;
-const HDW  = Math.floor((width - HPAD * 2 - HGAP * 6) / 7);
-const HDH  = Math.floor(HDW * 1.9);
-
-// ── Domino dans la main ───────────────────────────────────────────────────────
-function HandDomino({ piece, playable, isMyTurn, selected, onPress }) {
-  const bc = selected ? C.gold : (playable && isMyTurn) ? C.green : '#ccc';
-  const bw = selected ? 3 : (playable && isMyTurn) ? 2 : 1.5;
-  return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.75}>
-      <DominoFace
-        a={piece[0]} b={piece[1]}
-        w={HDW} h={HDH}
-        vertical={true}
-        borderColor={bc} borderWidth={bw}
-        extraStyle={{
-          opacity: (!playable && isMyTurn) ? 0.28 : 1,
-          transform: [{ translateY: selected ? -14 : 0 }],
-          elevation: selected ? 14 : 5,
-          backgroundColor: selected ? '#fffaf0' : C.domino,
-          shadowColor: selected ? C.gold : '#000',
-          shadowOpacity: selected ? 0.6 : 0.25,
-          shadowRadius: selected ? 10 : 4,
-        }}
-      />
-    </TouchableOpacity>
-  );
-}
-
-// ── Domino pioche (dos) ───────────────────────────────────────────────────────
-function PiocheDomino({ onPress }) {
-  return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.75}>
-      <View style={{
-        width: HDW, height: HDH,
-        backgroundColor: '#1a3d20',
-        borderRadius: Math.max(4, HDW * 0.12),
-        borderWidth: 2, borderColor: C.gold,
-        alignItems: 'center', justifyContent: 'center',
-        elevation: 4,
-      }}>
-        <View style={{
-          width: HDW * 0.55, height: HDH * 0.55,
-          borderRadius: 5, borderWidth: 1.5,
-          borderColor: 'rgba(201,168,76,0.35)',
-        }} />
-        <Text style={{ color: C.gold, fontSize: 7, marginTop: 4, letterSpacing: 1 }}>PIOCHER</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ── Domino caché adversaire ───────────────────────────────────────────────────
-function HiddenDomino({ w = 14, h = 26 }) {
-  return (
-    <View style={{
-      width: w, height: h,
-      backgroundColor: '#1a3d20',
-      borderRadius: 3, borderWidth: 1, borderColor: '#2e6e36',
-      marginVertical: 1,
-    }} />
-  );
-}
-
-// ── Le serveur calcule x,y,rotation pour chaque domino ───────────────────────
-// Le client affiche simplement chaque domino à sa position
-// Coordonnées serveur : 0-1000 (relatives)
-// On les convertit en pixels selon la taille réelle du plateau
-
-function scalePos(val, serverSize, clientSize) {
-  return (val / serverSize) * clientSize;
-}
+const { width }  = Dimensions.get('window');
 
 // ══════════════════════════════════════════════════════════════════════════════
 // APP
@@ -187,6 +38,7 @@ export default function App() {
   const [boardSize,    setBoardSize]    = useState({ w: 0, h: 0 });
   const socketRef = useRef(null);
 
+  // ── Socket ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const socket = io(SERVER_URL, { transports: ['websocket'] });
     socketRef.current = socket;
@@ -233,6 +85,7 @@ export default function App() {
     return () => socket.disconnect();
   }, []);
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
   function showToast(msg) {
     setToast(msg);
     setTimeout(() => setToast(''), 2500);
@@ -273,7 +126,6 @@ export default function App() {
     if (!canPlay(piece)) return showToast('Pièce non jouable');
 
     if (!boardEnds) {
-      // Premier coup → sélectionner pour afficher la zone centrale
       setSelectedIdx(selectedIdx === idx ? null : idx);
       return;
     }
@@ -282,7 +134,6 @@ export default function App() {
     const right = canPlayRight(piece);
 
     if (left && !right) {
-      // Un seul côté possible → jouer directement
       socketRef.current.emit('play_piece', { code: roomCode, piece, side: 'left' });
       return;
     }
@@ -290,7 +141,6 @@ export default function App() {
       socketRef.current.emit('play_piece', { code: roomCode, piece, side: 'right' });
       return;
     }
-    // Les deux côtés possibles → sélectionner
     setSelectedIdx(selectedIdx === idx ? null : idx);
   }
 
@@ -304,6 +154,7 @@ export default function App() {
     socketRef.current.emit('draw_piece', { code: roomCode });
   }
 
+  // ── Dérivés ───────────────────────────────────────────────────────────────
   const isMyTurn    = !!(socketRef.current && currentTurn === socketRef.current.id);
   const hasPlayable = myHand.some(p => canPlay(p));
   const needToDraw  = isMyTurn && !hasPlayable && maxPlayers === 2 && pioireLeft > 0;
@@ -314,12 +165,12 @@ export default function App() {
   const leftPlayer  = others[1] || null;
   const rightPlayer = others[2] || null;
 
-  const selPiece      = selectedIdx !== null ? myHand[selectedIdx] : null;
-  const showLeft      = isMyTurn && selPiece && board.length > 0 && canPlayLeft(selPiece);
-  const showRight     = isMyTurn && selPiece && board.length > 0 && canPlayRight(selPiece);
-  const showCenter    = isMyTurn && selPiece && board.length === 0;
+  const selPiece  = selectedIdx !== null ? myHand[selectedIdx] : null;
+  const showLeft  = isMyTurn && selPiece && board.length > 0 && canPlayLeft(selPiece);
+  const showRight = isMyTurn && selPiece && board.length > 0 && canPlayRight(selPiece);
+  const showCenter= isMyTurn && selPiece && board.length === 0;
 
-  // ── LOBBY ──────────────────────────────────────────────────────────────────
+  // ── LOBBY ─────────────────────────────────────────────────────────────────
   if (screen === 'lobby') return (
     <View style={S.bg}>
       <StatusBar hidden />
@@ -384,7 +235,7 @@ export default function App() {
     </View>
   );
 
-  // ── WAITING ────────────────────────────────────────────────────────────────
+  // ── WAITING ───────────────────────────────────────────────────────────────
   if (screen === 'waiting') return (
     <View style={[S.bg, { alignItems: 'center', justifyContent: 'center', gap: 14, padding: 20 }]}>
       <StatusBar hidden />
@@ -411,7 +262,7 @@ export default function App() {
     </View>
   );
 
-  // ── GAME ───────────────────────────────────────────────────────────────────
+  // ── GAME ──────────────────────────────────────────────────────────────────
   return (
     <View style={S.game}>
       <StatusBar hidden />
@@ -420,51 +271,48 @@ export default function App() {
       <View style={S.header}>
         <View style={S.scoreBox}>
           <Text style={S.sLbl}>NOUS</Text>
-          <Text style={S.sVal}>{scores[me?.team ?? 0]}<Text style={S.sMax}>/100</Text></Text>
+          <Text style={S.sVal}>
+            {scores[me?.team ?? 0]}<Text style={S.sMax}>/100</Text>
+          </Text>
         </View>
         <Text style={S.sX}>✕</Text>
         <View style={S.scoreBox}>
           <Text style={[S.sLbl, { color: C.red }]}>RIVAUX</Text>
-          <Text style={[S.sVal, { color: C.red }]}>{scores[me?.team === 0 ? 1 : 0]}<Text style={S.sMax}>/100</Text></Text>
+          <Text style={[S.sVal, { color: C.red }]}>
+            {scores[me?.team === 0 ? 1 : 0]}<Text style={S.sMax}>/100</Text>
+          </Text>
         </View>
       </View>
 
       {/* ADVERSAIRE HAUT */}
-      {topPlayer && (
-        <View style={S.topOpp}>
-          <View style={S.oppAv}>
-            <Text style={S.oppAvTxt}>{topPlayer.name[0].toUpperCase()}</Text>
-            {topPlayer.id === currentTurn && <View style={S.turnRing} />}
-          </View>
-          <Text style={S.oppLbl}>{handCounts[topPlayer.id] ?? 7} dominos</Text>
-          <View style={{ flexDirection: 'row', gap: 3, marginTop: 3 }}>
-            {Array.from({ length: Math.min(handCounts[topPlayer.id] ?? 7, 7) }).map((_, i) => (
-              <HiddenDomino key={i} w={18} h={9} />
-            ))}
-          </View>
-        </View>
-      )}
+      <TopOpponent
+        player={topPlayer}
+        handCount={handCounts[topPlayer?.id]}
+        isCurrentTurn={topPlayer?.id === currentTurn}
+      />
 
-      {/* MILIEU : côtés + plateau */}
+      {/* MILIEU */}
       <View style={S.middleRow}>
 
         {/* GAUCHE */}
-        {leftPlayer ? (
-          <View style={S.sideOpp}>
-            <View style={S.sideAv}>
-              <Text style={S.sideAvTxt}>{leftPlayer.name[0].toUpperCase()}</Text>
-              {leftPlayer.id === currentTurn && <View style={S.turnRing} />}
-            </View>
-            <Text style={S.sideLbl}>{handCounts[leftPlayer.id] ?? 7}{'\n'}dom.</Text>
-            {Array.from({ length: Math.min(handCounts[leftPlayer.id] ?? 7, 7) }).map((_, i) => (
-              <HiddenDomino key={i} />
-            ))}
-          </View>
-        ) : <View style={{ width: 36 }} />}
+        <SideOpponent
+          player={leftPlayer}
+          handCount={handCounts[leftPlayer?.id]}
+          isCurrentTurn={leftPlayer?.id === currentTurn}
+          side="left"
+        />
 
         {/* PLATEAU */}
-        <View
-          style={S.boardArea}
+        <BoardArea
+          board={board}
+          boardSize={boardSize}
+          boardEnds={boardEnds}
+          isMyTurn={isMyTurn}
+          selPiece={selPiece}
+          showLeft={showLeft}
+          showRight={showRight}
+          showCenter={showCenter}
+          onPlaySide={playSide}
           onLayout={e => {
             const { width: w, height: h } = e.nativeEvent.layout;
             setBoardSize({ w, h });
@@ -472,116 +320,32 @@ export default function App() {
               socketRef.current.emit('board_size', { code: roomCode, width: 1000, height: 600 });
             }
           }}
-        >
-          {/* Dominos */}
-          {board.map((tile, i) => {
-            const scX = boardSize.w > 0 ? boardSize.w / 1000 : 1;
-            const scY = boardSize.h > 0 ? boardSize.h / 600  : 1;
-            const px  = (tile.x || 0) * scX;
-            const py  = (tile.y || 0) * scY;
-            const tw  = tile.w ? tile.w * scX : (tile.vertical ? 28 * scX : 56 * scX);
-            const th  = tile.h ? tile.h * scY : (tile.vertical ? 56 * scY : 28 * scY);
-            return (
-              <View key={i} style={{
-                position: 'absolute',
-                left: px, top: py,
-                transform: tile.rotation ? [{ rotate: `${tile.rotation}deg` }] : [],
-              }}>
-                <DominoFace
-                  a={tile.a ?? tile[0]} b={tile.b ?? tile[1]}
-                  w={tw} h={th}
-                  vertical={tile.vertical ?? true}
-                  borderColor="#ccc" borderWidth={1.2}
-                />
-              </View>
-            );
-          })}
-
-          {/* Plateau vide */}
-          {board.length === 0 && !selPiece && (
-            <View style={S.emptyBoard}>
-              <Text style={S.emptyTxt}>{'Appuyez sur un domino\npuis posez-le ici'}</Text>
-            </View>
-          )}
-
-          {/* Zone centre (1er coup) */}
-          {showCenter && (
-            <TouchableOpacity style={S.zoneAll} onPress={() => playSide('right')} activeOpacity={0.75}>
-              <Text style={S.zoneCenterTxt}>✓ Poser ici</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Zones gauche / droite */}
-          {(showLeft || showRight) && (
-            <>
-              {showLeft && (
-                <TouchableOpacity style={S.zoneLeft} onPress={() => playSide('left')} activeOpacity={0.75}>
-                  <Text style={S.zoneArrow}>◀</Text>
-                  <Text style={S.zoneNum}>{boardEnds?.left}</Text>
-                </TouchableOpacity>
-              )}
-              {showRight && (
-                <TouchableOpacity style={S.zoneRight} onPress={() => playSide('right')} activeOpacity={0.75}>
-                  <Text style={S.zoneNum}>{boardEnds?.right}</Text>
-                  <Text style={S.zoneArrow}>▶</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
+        />
 
         {/* DROITE */}
-        {rightPlayer ? (
-          <View style={S.sideOpp}>
-            {Array.from({ length: Math.min(handCounts[rightPlayer.id] ?? 7, 7) }).map((_, i) => (
-              <HiddenDomino key={i} />
-            ))}
-            <Text style={S.sideLbl}>{handCounts[rightPlayer.id] ?? 7}{'\n'}dom.</Text>
-            <View style={S.sideAv}>
-              <Text style={S.sideAvTxt}>{rightPlayer.name[0].toUpperCase()}</Text>
-              {rightPlayer.id === currentTurn && <View style={S.turnRing} />}
-            </View>
-          </View>
-        ) : <View style={{ width: 36 }} />}
+        <SideOpponent
+          player={rightPlayer}
+          handCount={handCounts[rightPlayer?.id]}
+          isCurrentTurn={rightPlayer?.id === currentTurn}
+          side="right"
+        />
       </View>
 
       {/* MAIN */}
-      <View style={S.handArea}>
-        <View style={S.handHeader}>
-          <View style={S.myAv}>
-            <Text style={S.myAvTxt}>{me?.name?.[0]?.toUpperCase() || 'M'}</Text>
-            {isMyTurn && <View style={S.turnRing} />}
-          </View>
-          <Text style={S.handInfo} numberOfLines={1}>
-            {needToDraw
-              ? '🂠 Pioche un domino'
-              : isMyTurn
-                ? selectedIdx !== null ? 'Choisissez un côté ⬆' : '🎯 Appuyez sur un domino'
-                : `Tour de ${players.find(x => x.id === currentTurn)?.name || '…'}`}
-          </Text>
-          {selectedIdx !== null && (
-            <TouchableOpacity style={S.btnCancel} onPress={() => setSelectedIdx(null)}>
-              <Text style={S.btnCancelTxt}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={S.handRow}>
-          {myHand.map((piece, i) => (
-            <HandDomino
-              key={`${i}-${piece[0]}-${piece[1]}`}
-              piece={piece}
-              playable={canPlay(piece)}
-              isMyTurn={isMyTurn && !needToDraw}
-              selected={selectedIdx === i}
-              onPress={() => handleSelect(i)}
-            />
-          ))}
-          {needToDraw && Array.from({ length: Math.min(pioireLeft, 3) }).map((_, i) => (
-            <PiocheDomino key={`pioche-${i}`} onPress={drawPiece} />
-          ))}
-        </View>
-      </View>
+      <HandArea
+        myHand={myHand}
+        me={me}
+        isMyTurn={isMyTurn}
+        needToDraw={needToDraw}
+        pioireLeft={pioireLeft}
+        selectedIdx={selectedIdx}
+        currentTurn={currentTurn}
+        players={players}
+        canPlay={canPlay}
+        onSelect={handleSelect}
+        onDraw={drawPiece}
+        onCancelSelect={() => setSelectedIdx(null)}
+      />
 
       {/* TOAST */}
       {!!toast && (
@@ -642,6 +406,7 @@ export default function App() {
 
 // ── STYLES ────────────────────────────────────────────────────────────────────
 const S = StyleSheet.create({
+  // Lobby
   bg:          { flex: 1, backgroundColor: C.bg },
   lobbyScroll: { padding: 20, paddingBottom: 40, alignItems: 'center' },
   logoWrap:    { alignItems: 'center', marginBottom: 20, marginTop: 16 },
@@ -666,66 +431,42 @@ const S = StyleSheet.create({
   divLine: { flex: 1, height: 1, backgroundColor: C.border },
   divTxt:  { fontSize: 12, color: C.dim, letterSpacing: 2 },
   err:     { color: '#c0392b', fontSize: 13, marginTop: 4 },
+
+  // Waiting
   wLbl:  { fontSize: 12, letterSpacing: 3, color: C.dim, fontWeight: '700' },
   wCode: { fontSize: 52, fontWeight: '900', color: C.gold, letterSpacing: 12 },
   wHint: { fontSize: 12, color: C.dim },
   slot:  { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(26,69,32,0.4)', borderWidth: 1, borderColor: C.border, borderRadius: 12, height: 50, paddingHorizontal: 16 },
-  slotOn: { borderColor: C.gold },
+  slotOn:{ borderColor: C.gold },
   av:    { width: 32, height: 32, borderRadius: 16, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center' },
   avTxt: { fontWeight: '700', fontSize: 14, color: '#1a1200' },
   pName: { fontWeight: '600', fontSize: 14, color: C.text, flex: 1 },
-  tBadge: { fontSize: 10, color: C.gold, fontWeight: '700', letterSpacing: 1 },
+  tBadge:{ fontSize: 10, color: C.gold, fontWeight: '700', letterSpacing: 1 },
   spin:  { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: C.border, borderTopColor: C.gold },
   wTxt:  { color: C.dim, fontSize: 13 },
 
+  // Game
   game:   { flex: 1, backgroundColor: C.felt },
-  header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, backgroundColor: 'rgba(8,18,8,0.88)', borderBottomWidth: 1, borderBottomColor: C.border },
+  header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, backgroundColor: 'rgba(6,14,6,0.92)', borderBottomWidth: 1, borderBottomColor: C.border },
   scoreBox: { flex: 1, alignItems: 'center' },
-  sLbl: { fontSize: 13, fontWeight: '800', color: C.gold, letterSpacing: 2 },
-  sVal: { fontSize: 26, fontWeight: '900', color: C.gold },
-  sMax: { fontSize: 14, color: C.dim },
-  sX:   { fontSize: 22, color: C.gold, paddingHorizontal: 10 },
-
-  topOpp:   { alignItems: 'center', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: 'rgba(46,92,52,0.3)' },
-  oppAv:    { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(201,168,76,0.2)', borderWidth: 2, borderColor: C.gold, alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  oppAvTxt: { fontSize: 12, fontWeight: '700', color: C.gold },
-  oppLbl:   { fontSize: 10, color: C.dim, marginTop: 2 },
-  turnRing: { position: 'absolute', top: -3, left: -3, right: -3, bottom: -3, borderRadius: 999, borderWidth: 2.5, borderColor: C.gold },
+  sLbl: { fontSize: 11, fontWeight: '800', color: C.gold, letterSpacing: 2 },
+  sVal: { fontSize: 28, fontWeight: '900', color: C.gold },
+  sMax: { fontSize: 13, color: C.dim },
+  sX:   { fontSize: 20, color: C.goldDim, paddingHorizontal: 10 },
 
   middleRow: { flex: 1, flexDirection: 'row' },
-  sideOpp:   { width: 40, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 6, backgroundColor: 'rgba(8,18,8,0.15)' },
-  sideAv:    { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(201,168,76,0.2)', borderWidth: 1.5, borderColor: C.gold, alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  sideAvTxt: { fontSize: 10, fontWeight: '700', color: C.gold },
-  sideLbl:   { fontSize: 8, color: C.dim, textAlign: 'center' },
 
-  boardArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: 'rgba(18,52,22,0.35)', margin: 4, borderRadius: 8 },
-  emptyBoard: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyTxt:   { color: C.dim, fontSize: 12, textAlign: 'center', opacity: 0.55, lineHeight: 20 },
-
-  zoneAll:   { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(201,168,76,0.15)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
-  zoneCenterTxt: { fontSize: 20, fontWeight: '900', color: C.gold },
-  zoneLeft:  { position: 'absolute', left: 0, top: 0, bottom: 0, width: '38%', backgroundColor: 'rgba(201,168,76,0.18)', borderRightWidth: 1, borderRightColor: 'rgba(201,168,76,0.4)', alignItems: 'center', justifyContent: 'center', gap: 4, zIndex: 10 },
-  zoneRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: '38%', backgroundColor: 'rgba(201,168,76,0.18)', borderLeftWidth: 1, borderLeftColor: 'rgba(201,168,76,0.4)', alignItems: 'center', justifyContent: 'center', gap: 4, zIndex: 10 },
-  zoneArrow: { fontSize: 22, fontWeight: '900', color: C.gold },
-  zoneNum:   { fontSize: 26, fontWeight: '900', color: C.gold },
-
-  handArea:   { backgroundColor: 'rgba(8,16,8,0.9)', borderTopWidth: 1, borderTopColor: C.border, paddingTop: 8, paddingBottom: 14 },
-  handHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, marginBottom: 8 },
-  myAv:       { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(201,168,76,0.25)', borderWidth: 2, borderColor: C.gold, alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  myAvTxt:    { fontSize: 12, fontWeight: '700', color: C.gold },
-  handInfo:   { flex: 1, fontSize: 10, color: C.text, fontWeight: '600' },
-  btnCancel:  { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(200,60,60,0.3)', borderWidth: 1, borderColor: C.red, alignItems: 'center', justifyContent: 'center' },
-  btnCancelTxt: { fontSize: 16, fontWeight: '900', color: C.red },
-  handRow:    { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', paddingHorizontal: HPAD, gap: HGAP, flexWrap: 'wrap' },
-
-  toast:    { position: 'absolute', bottom: 145, alignSelf: 'center', backgroundColor: 'rgba(20,50,22,0.96)', borderWidth: 1, borderColor: C.gold, borderRadius: 20, paddingVertical: 10, paddingHorizontal: 20, zIndex: 50 },
+  // Toast
+  toast:    { position: 'absolute', bottom: 145, alignSelf: 'center', backgroundColor: 'rgba(10,28,12,0.97)', borderWidth: 1, borderColor: C.gold, borderRadius: 20, paddingVertical: 10, paddingHorizontal: 20, zIndex: 50, elevation: 20 },
   toastTxt: { fontSize: 13, fontWeight: '600', color: C.text },
-  overlay:  { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.78)', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 },
-  ovCard:   { backgroundColor: C.felt, borderWidth: 1, borderColor: C.gold, borderRadius: 20, padding: 28, width: '100%', maxWidth: 340, alignItems: 'center', elevation: 20 },
-  ovTitle:  { fontSize: 22, fontWeight: '900', color: C.gold, marginBottom: 6, textAlign: 'center' },
-  ovPts:    { fontSize: 14, color: C.dim, marginBottom: 16 },
-  ovScores: { flexDirection: 'row', gap: 40, marginBottom: 16 },
-  ovTN:     { fontSize: 11, letterSpacing: 1.5, color: C.dim, marginBottom: 4 },
-  ovTV:     { fontSize: 42, fontWeight: '900', color: C.gold, lineHeight: 46 },
-  ovHint:   { fontSize: 12, color: C.dim, textAlign: 'center' },
+
+  // Overlays
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.82)', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 },
+  ovCard:  { backgroundColor: C.felt, borderWidth: 1, borderColor: C.gold, borderRadius: 20, padding: 28, width: '100%', maxWidth: 340, alignItems: 'center', elevation: 20 },
+  ovTitle: { fontSize: 22, fontWeight: '900', color: C.gold, marginBottom: 6, textAlign: 'center' },
+  ovPts:   { fontSize: 14, color: C.dim, marginBottom: 16 },
+  ovScores:{ flexDirection: 'row', gap: 40, marginBottom: 16 },
+  ovTN:    { fontSize: 11, letterSpacing: 1.5, color: C.dim, marginBottom: 4 },
+  ovTV:    { fontSize: 42, fontWeight: '900', color: C.gold, lineHeight: 46 },
+  ovHint:  { fontSize: 12, color: C.dim, textAlign: 'center' },
 });
