@@ -46,8 +46,10 @@ export default function App() {
     socket.on('room_created',  ({ code, player, players: pl }) => {
       setMe(player); setPlayers(pl); setRoomCode(code); setScreen('waiting');
     });
-    socket.on('room_joined',   ({ code, player, players: pl }) => {
-      setMe(player); setPlayers(pl); setRoomCode(code); setScreen('waiting');
+    socket.on('room_joined',   ({ code, player, players: pl, maxPlayers: mp }) => {
+      setMe(player); setPlayers(pl); setRoomCode(code);
+      if (mp) setMaxPlayers(mp);
+      setScreen('waiting');
     });
     socket.on('player_joined', ({ players: pl }) => setPlayers(pl));
     socket.on('manche_start',  ({ hand, currentTurn: ct, scores: sc, board: b, boardEnds: be, pioireLeft: pl }) => {
