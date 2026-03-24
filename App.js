@@ -23,67 +23,64 @@ const C = {
 };
 
 // ── Points ────────────────────────────────────────────────────────────────────
-const PIPS = {
+// ── Positions des points (proportionnelles) ─────────────────────────────────
+const DOT_POSITIONS = {
   0: [],
-  1: [[1,1]],
-  2: [[0,2],[2,0]],
-  3: [[0,2],[1,1],[2,0]],
-  4: [[0,0],[0,2],[2,0],[2,2]],
-  5: [[0,0],[0,2],[1,1],[2,0],[2,2]],
-  6: [[0,0],[0,2],[1,0],[1,2],[2,0],[2,2]],
+  1: [[0.5,  0.5]],
+  2: [[0.25, 0.25], [0.75, 0.75]],
+  3: [[0.25, 0.25], [0.5,  0.5],  [0.75, 0.75]],
+  4: [[0.25, 0.25], [0.25, 0.75], [0.75, 0.25], [0.75, 0.75]],
+  5: [[0.25, 0.25], [0.25, 0.75], [0.5,  0.5],  [0.75, 0.25], [0.75, 0.75]],
+  6: [[0.25, 0.17], [0.25, 0.5],  [0.25, 0.83], [0.75, 0.17], [0.75, 0.5],  [0.75, 0.83]],
 };
 
-function PipGrid({ value, size }) {
-  const pts  = PIPS[value] || [];
-  const r    = Math.max(1.5, size * 0.14);
-  const pad  = size * 0.08;
-  const cell = (size - pad * 2) / 3;
-  return (
-    <View style={{ width: size, height: size, position: 'relative' }}>
-      {pts.map(([row, col], i) => (
-        <View key={i} style={{
-          position: 'absolute',
-          width: r * 2, height: r * 2, borderRadius: r,
-          backgroundColor: C.dot,
-          top:  pad + row * cell + cell / 2 - r,
-          left: pad + col * cell + cell / 2 - r,
-        }} />
-      ))}
-    </View>
-  );
+function renderDots(num, areaW, areaH) {
+  const positions = DOT_POSITIONS[num] || [];
+  const dotR = Math.max(2.5, Math.min(areaW, areaH) * 0.1);
+  return positions.map(([px, py], i) => (
+    <View key={i} style={{
+      position: 'absolute',
+      width: dotR * 2, height: dotR * 2,
+      borderRadius: dotR,
+      backgroundColor: '#1a1a2e',
+      left: px * areaW - dotR,
+      top:  py * areaH - dotR,
+    }} />
+  ));
 }
 
-// ── Domino générique ──────────────────────────────────────────────────────────
-function Domino({ a, b, w, h, vertical = false, bc = '#ccc', bw = 1.5, style = {} }) {
-  const r = Math.max(4, Math.min(w, h) * 0.12);
-  const pip = Math.max(5, Math.floor(Math.min(w, h) * 0.36));
+// ── Composant Domino ──────────────────────────────────────────────────────────
+function DominoFace({ a, b, w, h, vertical, borderColor='#ccc', borderWidth=1.5, extraStyle={} }) {
+  const radius = Math.max(6, Math.min(w, h) * 0.15);
+  const areaW  = vertical ? w      : w / 2;
+  const areaH  = vertical ? h / 2  : h;
   return (
     <View style={[{
       width: w, height: h,
-      backgroundColor: C.domino,
-      borderRadius: r, borderWidth: bw, borderColor: bc,
+      backgroundColor: '#ffffff',
+      borderRadius: radius,
+      borderWidth, borderColor,
       flexDirection: vertical ? 'column' : 'row',
-      alignItems: 'center', justifyContent: 'center',
       overflow: 'hidden', position: 'relative',
-      elevation: 5,
+      elevation: 6,
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.3, shadowRadius: 4,
-    }, style]}>
+      shadowOffset: { width: 2, height: 2 },
+      shadowOpacity: 0.3, shadowRadius: 3,
+    }, extraStyle]}>
       <View style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: '38%',
-        backgroundColor: 'rgba(255,255,255,0.26)',
-        borderTopLeftRadius: r, borderTopRightRadius: r,
+        position: 'absolute', top: 0, left: 0, right: 0, height: '45%',
+        backgroundColor: 'rgba(255,255,255,0.45)',
+        borderTopLeftRadius: radius, borderTopRightRadius: radius,
       }} />
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <PipGrid value={a} size={pip} />
+      <View style={{ width: areaW, height: areaH, position: 'relative' }}>
+        {renderDots(a, areaW, areaH)}
       </View>
       {vertical
-        ? <View style={{ width: '70%', height: 1.5, backgroundColor: '#bbb' }} />
-        : <View style={{ height: '70%', width: 1.5, backgroundColor: '#bbb' }} />
+        ? <View style={{ width: '80%', height: 1.5, backgroundColor: '#888', alignSelf: 'center' }} />
+        : <View style={{ width: 1.5, height: '80%', backgroundColor: '#888', alignSelf: 'center' }} />
       }
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <PipGrid value={b} size={pip} />
+      <View style={{ width: areaW, height: areaH, position: 'relative' }}>
+        {renderDots(b, areaW, areaH)}
       </View>
     </View>
   );
@@ -155,74 +152,13 @@ function HiddenDomino({ w = 14, h = 26 }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// ALGORITHME SERPENT
-//
-// Le serveur envoie board[] dans l'ordre visuel GAUCHE → DROITE :
-//   board[0]   = domino à l'extrémité gauche
-//   board[n-1] = domino à l'extrémité droite
-//
-// Disposition :
-//   - Dominos horizontaux, collés sans espace
-//   - Quand la ligne est pleine → dernier domino tourne 90° (virage vertical)
-//     et la ligne suivante repart dans le sens inverse
-//   - Double → posé verticalement, centré sur sa position
-//   - Auto-rétrécissement selon le nombre de pièces
-//
-// Structure d'une tile :
-//   { x, y, w, h, a, b, vertical }
-// ══════════════════════════════════════════════════════════════════════════════
-function buildSnake(board, bw, bh) {
-  if (!board || board.length === 0 || bw < 10 || bh < 10) return [];
+// ── Le serveur calcule x,y,rotation pour chaque domino ───────────────────────
+// Le client affiche simplement chaque domino à sa position
+// Coordonnées serveur : 0-1000 (relatives)
+// On les convertit en pixels selon la taille réelle du plateau
 
-  const n   = board.length;
-  const PAD = 4;
-
-  // Taille adaptative
-  let dw = 52, dh = 27;
-  for (let w = 56; w >= 20; w -= 2) {
-    const h = Math.round(w * 0.52);
-    const perRow = Math.max(2, Math.floor((bw - PAD*2) / w));
-    const rows = Math.ceil(n / perRow);
-    if (rows * (h + w) <= bh - PAD*2) { dw = w; dh = h; break; }
-  }
-  const pip = Math.max(5, Math.floor(dh * 0.68));
-
-  // Algorithme avec vrais virages :
-  // Le dernier domino avant le bord devient VERTICAL (tourne a 90°)
-  // et la ligne suivante repart dans le sens oppose
-  const tiles = [];
-  let x = PAD, y = PAD, dir = 1;
-
-  for (let i = 0; i < n; i++) {
-    const item = board[i];
-    // Est-ce le dernier domino avant le bord ?
-    const atRightEdge = dir === 1  && x + dw * 2 > bw - PAD;
-    const atLeftEdge  = dir === -1 && x - dw < PAD;
-    const isCorner    = (atRightEdge || atLeftEdge) && i < n - 1;
-
-    if (isCorner) {
-      // Poser en virage vertical
-      tiles.push({ x, y, w: dh, h: dw, a: item.piece[0], b: item.piece[1], vertical: true, pip });
-      // Descendre et changer de direction
-      y += dw;
-      dir = -dir;
-      // Repositionner x au debut de la nouvelle ligne
-      x = dir === 1 ? PAD : bw - PAD - dw;
-    } else {
-      // Domino horizontal normal
-      tiles.push({ x, y, w: dw, h: dh, a: item.piece[0], b: item.piece[1], vertical: false, pip });
-      x += dir * dw;
-    }
-  }
-
-  // Centrer verticalement
-  const minY    = Math.min(...tiles.map(t => t.y));
-  const maxY    = Math.max(...tiles.map(t => t.y + t.h));
-  const totalH  = maxY - minY;
-  const offsetY = Math.max(0, Math.floor((bh - totalH) / 2)) - minY;
-
-  return tiles.map(t => ({ ...t, y: t.y + offsetY }));
+function scalePos(val, serverSize, clientSize) {
+  return (val / serverSize) * clientSize;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -262,9 +198,10 @@ export default function App() {
       setMe(player); setPlayers(pl); setRoomCode(code); setScreen('waiting');
     });
     socket.on('player_joined', ({ players: pl }) => setPlayers(pl));
-    socket.on('manche_start',  ({ hand, currentTurn: ct, scores: sc, board: b, boardEnds: be }) => {
+    socket.on('manche_start',  ({ hand, currentTurn: ct, scores: sc, board: b, boardEnds: be, pioireLeft: pl }) => {
       setMyHand(hand); setCurrentTurn(ct); setScores(sc);
       setBoard(b || []); setBoardEnds(be);
+      setPioireLeft(pl || 0);
       setSelectedIdx(null); setMancheResult(null); setGameOver(null);
       setScreen('game');
       if (ct === socket.id) showToast('🎯 Vous commencez !');
@@ -274,8 +211,9 @@ export default function App() {
       if (playerId !== socket.id) showToast('Domino joué');
     });
     socket.on('hand_update',   ({ hand }) => { setMyHand(hand); setSelectedIdx(null); });
-    socket.on('turn_change',   ({ currentTurn: ct, skipped }) => {
+    socket.on('turn_change',   ({ currentTurn: ct, skipped, pioireLeft: pl }) => {
       setCurrentTurn(ct); setSelectedIdx(null);
+      if (pl !== undefined) setPioireLeft(pl);
       if (skipped?.length > 0) showToast('Un joueur passe son tour');
     });
     socket.on('forced_pass',   () => showToast('Vous passez votre tour'));
@@ -376,7 +314,6 @@ export default function App() {
   const leftPlayer  = others[1] || null;
   const rightPlayer = others[2] || null;
 
-  const tiles         = buildSnake(board, boardSize.w, boardSize.h);
   const selPiece      = selectedIdx !== null ? myHand[selectedIdx] : null;
   const showLeft      = isMyTurn && selPiece && board.length > 0 && canPlayLeft(selPiece);
   const showRight     = isMyTurn && selPiece && board.length > 0 && canPlayRight(selPiece);
@@ -390,7 +327,7 @@ export default function App() {
 
         {/* Logo */}
         <View style={S.logoWrap}>
-          <Domino a={6} b={6} w={52} h={100} vertical={true}
+          <DominoFace a={6} b={6} w={52} h={100} vertical={true}
             style={{ marginBottom: 16, elevation: 10 }} />
           <Text style={S.t1}>DOMINO</Text>
           <Text style={S.t2}>BLOQUÉ</Text>
@@ -531,6 +468,9 @@ export default function App() {
           onLayout={e => {
             const { width: w, height: h } = e.nativeEvent.layout;
             setBoardSize({ w, h });
+            if (socketRef.current && roomCode) {
+              socketRef.current.emit('board_size', { code: roomCode, width: 1000, height: 600 });
+            }
           }}
         >
           {/* Dominos */}
