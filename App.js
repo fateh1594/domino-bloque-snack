@@ -98,12 +98,12 @@ function HandDomino({ piece, playable, isMyTurn, selected, onPress }) {
   const bw = selected ? 3 : (playable && isMyTurn) ? 2 : 1.5;
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.75}>
-      <Domino
+      <DominoFace
         a={piece[0]} b={piece[1]}
         w={HDW} h={HDH}
         vertical={true}
-        bc={bc} bw={bw}
-        style={{
+        borderColor={bc} borderWidth={bw}
+        extraStyle={{
           opacity: (!playable && isMyTurn) ? 0.28 : 1,
           transform: [{ translateY: selected ? -14 : 0 }],
           elevation: selected ? 14 : 5,
@@ -328,7 +328,7 @@ export default function App() {
         {/* Logo */}
         <View style={S.logoWrap}>
           <DominoFace a={6} b={6} w={52} h={100} vertical={true}
-            style={{ marginBottom: 16, elevation: 10 }} />
+            extraStyle={{ marginBottom: 16, elevation: 10 }} />
           <Text style={S.t1}>DOMINO</Text>
           <Text style={S.t2}>BLOQUÉ</Text>
           <View style={S.connRow}>
@@ -474,16 +474,28 @@ export default function App() {
           }}
         >
           {/* Dominos */}
-          {tiles.map((tile, i) => (
-            <View key={i} style={{ position: 'absolute', left: tile.x, top: tile.y }}>
-              <Domino
-                a={tile.a} b={tile.b}
-                w={tile.w} h={tile.h}
-                vertical={tile.vertical}
-                bc="#ccc" bw={1.2}
-              />
-            </View>
-          ))}
+          {board.map((tile, i) => {
+            const scX = boardSize.w > 0 ? boardSize.w / 1000 : 1;
+            const scY = boardSize.h > 0 ? boardSize.h / 600  : 1;
+            const px  = (tile.x || 0) * scX;
+            const py  = (tile.y || 0) * scY;
+            const tw  = tile.w ? tile.w * scX : (tile.vertical ? 28 * scX : 56 * scX);
+            const th  = tile.h ? tile.h * scY : (tile.vertical ? 56 * scY : 28 * scY);
+            return (
+              <View key={i} style={{
+                position: 'absolute',
+                left: px, top: py,
+                transform: tile.rotation ? [{ rotate: `${tile.rotation}deg` }] : [],
+              }}>
+                <DominoFace
+                  a={tile.a ?? tile[0]} b={tile.b ?? tile[1]}
+                  w={tw} h={th}
+                  vertical={tile.vertical ?? true}
+                  borderColor="#ccc" borderWidth={1.2}
+                />
+              </View>
+            );
+          })}
 
           {/* Plateau vide */}
           {board.length === 0 && !selPiece && (
