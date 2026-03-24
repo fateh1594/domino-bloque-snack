@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 
 const { width } = Dimensions.get('window');
-export const C = { bg: '#0f1f0f', gold: '#c9a84c', domino: '#fdfcf7', dot: '#1a1a1a' };
+export const C = { gold: '#c9a84c', domino: '#fdfcf7', dot: '#1a1a1a' };
 export const HDW = Math.floor(width / 7.5); 
 export const HDH = HDW * 2; 
 
@@ -36,9 +36,9 @@ export function DominoFace({ a, b, w, h, vertical, borderColor = '#333' }) {
 }
 
 const S = StyleSheet.create({
-    card: { backgroundColor: C.domino, borderRadius: 4, borderWidth: 1.5, overflow: 'hidden' },
+    card: { backgroundColor: C.domino, borderRadius: 4, borderWidth: 1, overflow: 'hidden' },
     half: { flex: 1, position: 'relative' },
     dot: { position: 'absolute', backgroundColor: C.dot },
-    lineH: { height: 1.5, width: '80%', backgroundColor: 'rgba(0,0,0,0.1)', alignSelf: 'center' },
-    lineV: { width: 1.5, height: '80%', backgroundColor: 'rgba(0,0,0,0.1)', alignSelf: 'center' },
+    lineH: { height: 1, width: '80%', backgroundColor: 'rgba(0,0,0,0.1)', alignSelf: 'center' },
+    lineV: { width: 1, height: '80%', backgroundColor: 'rgba(0,0,0,0.1)', alignSelf: 'center' },
 });
