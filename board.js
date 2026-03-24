@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { DominoFace, HiddenDomino, C } from './domino';
+import { DominoFace, C } from './domino';
+import { HiddenDomino }  from './hand';
 
 // ── Constantes serveur ────────────────────────────────────────────────────────
 const SERVER_W = 1000;
@@ -13,7 +14,7 @@ export function BoardArea({
   board, boardSize, boardEnds,
   isMyTurn, selPiece,
   showLeft, showRight, showCenter,
-  onPlaySide,
+  onPlaySide, onLayout,
 }) {
   const scX = boardSize.w > 0 ? boardSize.w / SERVER_W : 1;
   const scY = boardSize.h > 0 ? boardSize.h / SERVER_H : 1;
@@ -21,7 +22,7 @@ export function BoardArea({
   const isEmpty = board.length === 0;
 
   return (
-    <View style={S.boardArea}>
+    <View style={S.boardArea} onLayout={onLayout}>
       {/* Texture tapis : lignes subtiles */}
       <View style={S.feltLines} pointerEvents="none">
         {[...Array(8)].map((_, i) => (

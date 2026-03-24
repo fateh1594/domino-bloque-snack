@@ -77,7 +77,7 @@ export function DominoFace({
 
   return (
     <View style={[{
-      width,
+      width:           w,
       height:          h,
       backgroundColor: C.domino,
       borderRadius:    radius,
