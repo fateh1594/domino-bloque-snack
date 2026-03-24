@@ -16,8 +16,13 @@ export function BoardArea({
   showLeft, showRight, showCenter,
   onPlaySide, onLayout,
 }) {
-  const scX = boardSize.w > 0 ? boardSize.w / SERVER_W : 1;
-  const scY = boardSize.h > 0 ? boardSize.h / SERVER_H : 1;
+  // Scale uniforme pour ne pas déformer les dominos
+  const sc = boardSize.w > 0
+    ? Math.min(boardSize.w / SERVER_W, boardSize.h / SERVER_H)
+    : 1;
+  // Offset pour centrer le contenu dans le plateau
+  const offX = boardSize.w > 0 ? (boardSize.w - SERVER_W * sc) / 2 : 0;
+  const offY = boardSize.h > 0 ? (boardSize.h - SERVER_H * sc) / 2 : 0;
 
   const isEmpty = board.length === 0;
 
@@ -44,10 +49,11 @@ export function BoardArea({
       {/* Dominos posés */}
       {board.map((tile, i) => {
         const isVert = (tile.rotation || 0) === 90;
-        const tw = isVert ? DOM_H * scX : DOM_W * scX;
-        const th = isVert ? DOM_W * scY : DOM_H * scY;
-        const px = (tile.x || 0) * scX;
-        const py = (tile.y || 0) * scY;
+        // Taille : ratio 2:1 respecté (DOM_W=200, DOM_H=100)
+        const tw = isVert ? DOM_H * sc : DOM_W * sc;
+        const th = isVert ? DOM_W * sc : DOM_H * sc;
+        const px = (tile.x || 0) * sc + offX;
+        const py = (tile.y || 0) * sc + offY;
         const a  = tile.piece ? tile.piece[0] : (tile.a ?? 0);
         const b  = tile.piece ? tile.piece[1] : (tile.b ?? 0);
 
@@ -57,8 +63,8 @@ export function BoardArea({
               a={a} b={b}
               w={tw} h={th}
               vertical={isVert}
-              borderColor="rgba(180,180,180,0.9)"
-              borderWidth={1}
+              borderColor="#333"
+              borderWidth={1.5}
             />
           </View>
         );
