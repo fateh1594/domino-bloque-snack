@@ -1,6 +1,5 @@
-// server.js - Logique de placement universelle (CommonJS)
 const DW = 200; 
-const DH = 100; 
+const DH = 100;
 const PAD = 50;
 
 function initLayout(boardW = 1000, boardH = 600) {
