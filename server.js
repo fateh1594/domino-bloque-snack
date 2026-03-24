@@ -295,7 +295,7 @@ io.on('connection', (socket) => {
     socket.roomCode = code.toUpperCase();
 
     io.to(code.toUpperCase()).emit('player_joined', { players: room.players });
-    socket.emit('room_joined', { code: code.toUpperCase(), player, players: room.players });
+    socket.emit('room_joined', { code: code.toUpperCase(), player, players: room.players, maxPlayers: room.maxPlayers });
 
     if (room.players.length === room.maxPlayers)
       setTimeout(() => startManche(room), 1000);
@@ -435,5 +435,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🎮 Domino Bloqué - Serveur v21 sur port ${PORT}\n`);
+  console.log(`\n🎮 Domino Bloqué - Serveur v23 sur port ${PORT}\n`);
 });
