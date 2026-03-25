@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, StatusBar, ScrollView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, StatusBar, ScrollView } from 'react-native';
 import { io } from 'socket.io-client';
 import { DominoFace, C, HPAD, HGAP } from './domino';
 import { HandArea } from './hand';
