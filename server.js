@@ -191,4 +191,285 @@ function endManche(room, winnerId) {
   if (room.scores[0] >= 100 || room.scores[1] >= 100) {
     const gameWinner = room.scores[0] >= 100 ? 0 : 1;
     io.to(room.code).emit('game_over', { winTeam: gameWinner, scores: room.scores });
-    room.
+    room.status = 'finished';
+  } else {
+    setTimeout(() => startManche(room), 4000);
+  }
+}
+
+function findStartingPlayer(room) {
+  if (room.maxPlayers === 4) {
+    for (const p of room.players)
+      if (room.hands[p.id].some(d => d[0] === 6 && d[1] === 6)) return p.id;
+    return room.players[0].id;
+  }
+  for (let v = 6; v >= 0; v--)
+    for (const p of room.players)
+      if (room.hands[p.id].some(d => d[0] === v && d[1] === v)) return p.id;
+  let bestPid = room.players[0].id, bestVal = -1;
+  for (const p of room.players) {
+    const maxVal = Math.max(...room.hands[p.id].map(d => d[0] + d[1]));
+    if (maxVal > bestVal) { bestVal = maxVal; bestPid = p.id; }
+  }
+  return bestPid;
+}
+
+function startManche(room) {
+  dealCards(room);
+  const startId = room.lastMancheWinner || findStartingPlayer(room);
+  room.currentTurn = startId;
+  room.status = 'playing';
+  room.layout = null;
+
+  room.players.forEach(p => {
+    io.to(p.id).emit('manche_start', {
+      hand: room.hands[p.id],
+      currentTurn: room.currentTurn,
+      scores: room.scores,
+      board: room.board,
+      boardEnds: room.boardEnds,
+      pioireLeft: room.pioche.length,
+    });
+  });
+}
+
+function nextTurn(room) {
+  const idx = room.players.findIndex(p => p.id === room.currentTurn);
+  room.currentTurn = room.players[(idx + 1) % room.players.length].id;
+}
+
+// ─── Socket.IO ────────────────────────────────────────────────────────────────
+io.on('connection', (socket) => {
+  console.log(`✅ Joueur connecté: ${socket.id}`);
+
+  socket.on('create_room', ({ name, maxPlayers }) => {
+    const code = generateCode();
+    rooms[code] = {
+      code, maxPlayers: parseInt(maxPlayers),
+      players: [], hands: {}, board: [], boardEnds: null,
+      scores: { 0: 0, 1: 0 }, status: 'waiting',
+      currentTurn: null, pioche: [], layout: null,
+      lastMancheWinner: null,
+    };
+    const player = { id: socket.id, name, team: 0 };
+    rooms[code].players.push(player);
+    socket.join(code);
+    socket.roomCode = code;
+    console.log(`🎮 Salle créée: ${code} par ${name}`);
+    socket.emit('room_created', { code, player, players: rooms[code].players });
+  });
+
+  socket.on('join_room', ({ name, code }) => {
+    const room = rooms[code.toUpperCase()];
+    if (!room)                         return socket.emit('error', { msg: 'Salle introuvable' });
+    if (room.status !== 'waiting')     return socket.emit('error', { msg: 'Partie déjà commencée' });
+    if (room.players.length >= room.maxPlayers) return socket.emit('error', { msg: 'Salle pleine' });
+
+    const pos  = room.players.length;
+    const team = room.maxPlayers === 4 ? (pos % 2) : pos;
+    const player = { id: socket.id, name, team };
+    room.players.push(player);
+    socket.join(code.toUpperCase());
+    socket.roomCode = code.toUpperCase();
+
+    console.log(`👤 ${name} a rejoint la salle ${code}`);
+    io.to(code.toUpperCase()).emit('player_joined', { players: room.players });
+    socket.emit('room_joined', { code: code.toUpperCase(), player, players: room.players, maxPlayers: room.maxPlayers });
+
+    if (room.players.length === room.maxPlayers) {
+      console.log(`🚀 Démarrage de la partie dans ${code}`);
+      setTimeout(() => startManche(room), 1000);
+    }
+  });
+
+  socket.on('board_size', ({ code, width, height }) => {
+    const room = rooms[code];
+    if (!room) return;
+    if (!room.layout) {
+      room.layout = initLayout();
+    }
+  });
+
+  socket.on('play_piece', ({ code, piece, side }) => {
+    const room = rooms[code];
+    if (!room) {
+      console.log(`❌ Salle ${code} introuvable`);
+      return;
+    }
+    
+    if (room.currentTurn !== socket.id) {
+      console.log(`❌ Pas le tour de ${socket.id}, c'est à ${room.currentTurn}`);
+      return socket.emit('error', { msg: "Ce n'est pas votre tour" });
+    }
+
+    const hand = room.hands[socket.id];
+    if (!hand) {
+      console.log(`❌ Main introuvable pour ${socket.id}`);
+      return;
+    }
+
+    const pieceIdx = hand.findIndex(d =>
+      (d[0] === piece[0] && d[1] === piece[1]) ||
+      (d[0] === piece[1] && d[1] === piece[0])
+    );
+    
+    if (pieceIdx === -1) {
+      console.log(`❌ Pièce [${piece[0]},${piece[1]}] pas trouvée dans la main`);
+      return;
+    }
+
+    let played = [...hand[pieceIdx]];
+    if (!room.layout) room.layout = initLayout();
+
+    console.log(`🎯 ${socket.id} joue [${played[0]},${played[1]}] côté ${side}`);
+
+    if (!room.boardEnds) {
+      const pos = getNextPosition(room.layout, 'center', played[0] === played[1]);
+      room.board.push({ 
+        piece: played, 
+        side: 'center', 
+        x: pos.x, 
+        y: pos.y, 
+        rotation: pos.rotation 
+      });
+      room.boardEnds = { left: played[0], right: played[1] };
+      console.log(`✅ Premier domino posé. Extrémités: ${played[0]} | ${played[1]}`);
+    } 
+    else {
+      const matchesLeft = played[0] === room.boardEnds.left || played[1] === room.boardEnds.left;
+      const matchesRight = played[0] === room.boardEnds.right || played[1] === room.boardEnds.right;
+
+      if (!matchesLeft && !matchesRight) {
+        console.log(`❌ Pièce [${played[0]},${played[1]}] ne correspond pas aux extrémités [${room.boardEnds.left},${room.boardEnds.right}]`);
+        return;
+      }
+
+      let actualSide = side;
+      if (matchesLeft && !matchesRight) actualSide = 'left';
+      if (matchesRight && !matchesLeft) actualSide = 'right';
+
+      const isDouble = played[0] === played[1];
+      const pos = getNextPosition(room.layout, actualSide, isDouble);
+
+      if (actualSide === 'left') {
+        if (played[1] === room.boardEnds.left) {
+          room.board.unshift({ piece: played, side: 'left', x: pos.x, y: pos.y, rotation: pos.rotation });
+          room.boardEnds.left = played[0];
+        } else {
+          played = [played[1], played[0]];
+          room.board.unshift({ piece: played, side: 'left', x: pos.x, y: pos.y, rotation: pos.rotation });
+          room.boardEnds.left = played[0];
+        }
+        console.log(`✅ Domino posé à gauche. Nouvelle extrémité gauche: ${room.boardEnds.left}`);
+      } else {
+        if (played[0] === room.boardEnds.right) {
+          room.board.push({ piece: played, side: 'right', x: pos.x, y: pos.y, rotation: pos.rotation });
+          room.boardEnds.right = played[1];
+        } else {
+          played = [played[1], played[0]];
+          room.board.push({ piece: played, side: 'right', x: pos.x, y: pos.y, rotation: pos.rotation });
+          room.boardEnds.right = played[1];
+        }
+        console.log(`✅ Domino posé à droite. Nouvelle extrémité droite: ${room.boardEnds.right}`);
+      }
+    }
+
+    room.hands[socket.id].splice(pieceIdx, 1);
+    console.log(`📋 ${socket.id} a maintenant ${room.hands[socket.id].length} domino(s)`);
+
+    io.to(code).emit('piece_played', {
+      playerId: socket.id,
+      board: room.board,
+      boardEnds: room.boardEnds,
+      handCounts: Object.fromEntries(room.players.map(p => [p.id, room.hands[p.id].length])),
+    });
+    
+    socket.emit('hand_update', { hand: room.hands[socket.id] });
+
+    if (room.hands[socket.id].length === 0) { 
+      console.log(`🏆 ${socket.id} a gagné la manche !`);
+      endManche(room, socket.id); 
+      return; 
+    }
+
+    nextTurn(room);
+    console.log(`⏭️ Tour suivant: ${room.currentTurn}`);
+
+    if (isBlocked(room)) { 
+      console.log(`🚫 Partie bloquée !`);
+      endManche(room, 'blocked'); 
+      return; 
+    }
+
+    let skipped = [];
+    if (room.maxPlayers === 2) {
+      io.to(code).emit('turn_change', { 
+        currentTurn: room.currentTurn, 
+        skipped: [], 
+        pioireLeft: room.pioche.length 
+      });
+    } else {
+      while (!canPlay(room.hands[room.currentTurn], room.boardEnds)) {
+        skipped.push(room.currentTurn);
+        io.to(room.currentTurn).emit('forced_pass', {});
+        nextTurn(room);
+        if (skipped.length >= room.players.length) { 
+          endManche(room, 'blocked'); 
+          return; 
+        }
+      }
+      io.to(code).emit('turn_change', { 
+        currentTurn: room.currentTurn, 
+        skipped, 
+        pioireLeft: room.pioche.length 
+      });
+    }
+  });
+
+  socket.on('draw_piece', ({ code }) => {
+    const room = rooms[code];
+    if (!room || room.currentTurn !== socket.id) return;
+    if (room.pioche.length === 0) return;
+
+    const piece = room.pioche.pop();
+    room.hands[socket.id].push(piece);
+
+    console.log(`🎲 ${socket.id} a pioché: [${piece[0]}, ${piece[1]}]`);
+
+    socket.emit('piece_drawn', { piece, hand: room.hands[socket.id] });
+    io.to(code).emit('draw_happened', {
+      playerId: socket.id,
+      handCounts: Object.fromEntries(room.players.map(p => [p.id, room.hands[p.id].length])),
+      pioireLeft: room.pioche.length,
+    });
+
+    const canNowPlay = canPlay(room.hands[socket.id], room.boardEnds);
+    if (canNowPlay) {
+      console.log(`✅ ${socket.id} peut maintenant jouer`);
+      io.to(code).emit('turn_change', { currentTurn: room.currentTurn, skipped: [], pioireLeft: room.pioche.length });
+    } else if (room.pioche.length === 0) {
+      console.log(`⏭️ ${socket.id} passe son tour (pioche vide)`);
+      nextTurn(room);
+      io.to(code).emit('turn_change', { currentTurn: room.currentTurn, skipped: [socket.id], pioireLeft: 0 });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`❌ Joueur déconnecté: ${socket.id}`);
+    const code = socket.roomCode;
+    if (!code || !rooms[code]) return;
+    const room = rooms[code];
+    room.players = room.players.filter(p => p.id !== socket.id);
+    if (room.players.length === 0) {
+      console.log(`🗑️ Suppression de la salle vide: ${code}`);
+      delete rooms[code];
+    } else {
+      io.to(code).emit('player_left', { players: room.players, msg: 'Un joueur a quitté la partie' });
+    }
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n🎮 Domino Bloqué - Serveur FINAL sur port ${PORT}\n`);
+});
