@@ -12,7 +12,6 @@ export function BoardArea({
 }) {
   const [dominoPositions, setDominoPositions] = useState([]);
 
-  // Recalculer les positions à chaque changement
   useEffect(() => {
     if (board && board.length > 0) {
       const positions = GameLogic.calculateBoardLayout(board, boardSize);
@@ -33,7 +32,6 @@ export function BoardArea({
   return (
     <View style={S.boardArea} onLayout={onLayout}>
       
-      {/* Info de debug améliorée */}
       <View style={S.debugInfo} pointerEvents="none">
         <Text style={S.debugText}>
           🎯 {board?.length || 0} dominos | {boardSize.w?.toFixed(0)}×{boardSize.h?.toFixed(0)}
@@ -45,7 +43,6 @@ export function BoardArea({
         )}
       </View>
 
-      {/* Plateau scrollable pour grandes parties */}
       <ScrollView
         style={S.boardScroll}
         contentContainerStyle={S.boardContent}
@@ -58,7 +55,6 @@ export function BoardArea({
       >
         <View style={S.gameArea}>
           
-          {/* Plateau vide */}
           {isEmpty && (
             <View style={S.emptyBoard}>
               <View style={S.emptyIcon}>
@@ -74,7 +70,6 @@ export function BoardArea({
             </View>
           )}
 
-          {/* Dominos placés avec positions intelligentes */}
           {dominoPositions.map((position, i) => {
             const tile = board[i];
             const values = GameLogic.extractDominoValues(tile);
@@ -111,7 +106,6 @@ export function BoardArea({
                   }}
                 />
                 
-                {/* Numéro d'ordre (mode debug) */}
                 {__DEV__ && (
                   <View style={S.orderBadge}>
                     <Text style={S.orderText}>{i + 1}</Text>
@@ -121,7 +115,6 @@ export function BoardArea({
             );
           })}
 
-          {/* Preview du domino sélectionné */}
           {isMyTurn && selPiece && !isEmpty && (
             <DominoPreview 
               piece={selPiece}
@@ -134,7 +127,6 @@ export function BoardArea({
         </View>
       </ScrollView>
 
-      {/* Zones de placement améliorées */}
       {showCenter && (
         <TouchableOpacity 
           style={S.centerZone} 
@@ -184,7 +176,6 @@ export function BoardArea({
   );
 }
 
-// Composant de preview intelligent
 function DominoPreview({ piece, boardEnds, showLeft, showRight, positions }) {
   if (!piece || !positions || positions.length === 0) return null;
 
@@ -495,7 +486,6 @@ const S = StyleSheet.create({
     color: '#000',
   },
 
-  // Styles adversaires (gardés identiques)
   topOpp: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -504,22 +494,139 @@ const S = StyleSheet.create({
     backgroundColor: 'rgba(8,18,8,0.5)',
     gap: 6,
   },
-  oppRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  
+  oppRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 10 
+  },
+  
   oppAv: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(201,168,76,0.15)', borderWidth: 2, borderColor: C.goldDim,
-    alignItems: 'center', justifyContent: 'center', position: 'relative',
+    width: 36, 
+    height: 36, 
+    borderRadius: 18,
+    backgroundColor: 'rgba(201,168,76,0.15)', 
+    borderWidth: 2, 
+    borderColor: C.goldDim,
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    position: 'relative',
   },
-  oppAvActive: { borderColor: C.gold, backgroundColor: 'rgba(201,168,76,0.25)' },
-  oppAvTxt: { fontSize: 14, fontWeight: '700', color: C.gold },
-  oppInfo: { flex: 1 },
-  oppName: { fontSize: 13, fontWeight: '700', color: C.text },
-  oppCount: { fontSize: 10, color: C.dim, marginTop: 1 },
+  
+  oppAvActive: { 
+    borderColor: C.gold, 
+    backgroundColor: 'rgba(201,168,76,0.25)' 
+  },
+  
+  oppAvTxt: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: C.gold 
+  },
+  
+  oppInfo: { 
+    flex: 1 
+  },
+  
+  oppName: { 
+    fontSize: 13, 
+    fontWeight: '700', 
+    color: C.text 
+  },
+  
+  oppCount: { 
+    fontSize: 10, 
+    color: C.dim, 
+    marginTop: 1 
+  },
+  
   turnBadge: {
-    backgroundColor: 'rgba(201,168,76,0.2)', borderWidth: 1, borderColor: C.gold,
-    borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3,
+    backgroundColor: 'rgba(201,168,76,0.2)', 
+    borderWidth: 1, 
+    borderColor: C.gold,
+    borderRadius: 10, 
+    paddingHorizontal: 8, 
+    paddingVertical: 3,
   },
-  turnBadgeTxt: { fontSize: 9, fontWeight: '800', color: C.gold, letterSpacing: 1 },
+  
+  turnBadgeTxt: { 
+    fontSize: 9, 
+    fontWeight: '800', 
+    color: C.gold, 
+    letterSpacing: 1 
+  },
+  
   turnRing: {
-    position: 'absolute', top: -4, left: -4, right: -4, bottom: -4,
-    borderRadius:
+    position: 'absolute', 
+    top: -4, 
+    left: -4, 
+    right: -4, 
+    bottom: -4,
+    borderRadius: 999, 
+    borderWidth: 2.5, 
+    borderColor: C.gold,
+  },
+  
+  hiddenRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    flexWrap: 'wrap', 
+    gap: 2 
+  },
+  
+  hiddenMore: { 
+    fontSize: 10, 
+    color: C.dim, 
+    marginLeft: 4 
+  },
+
+  sideOpp: {
+    width: 42, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 4,
+    paddingVertical: 8, 
+    backgroundColor: 'rgba(8,18,8,0.25)',
+  },
+  
+  sideAv: {
+    width: 28, 
+    height: 28, 
+    borderRadius: 14,
+    backgroundColor: 'rgba(201,168,76,0.15)', 
+    borderWidth: 1.5, 
+    borderColor: C.goldDim,
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    position: 'relative',
+  },
+  
+  sideAvActive: { 
+    borderColor: C.gold, 
+    backgroundColor: 'rgba(201,168,76,0.25)' 
+  },
+  
+  sideAvTxt: { 
+    fontSize: 11, 
+    fontWeight: '700', 
+    color: C.gold 
+  },
+  
+  sideName: { 
+    fontSize: 7, 
+    color: C.dim, 
+    textAlign: 'center', 
+    maxWidth: 38 
+  },
+  
+  sideCount: { 
+    fontSize: 10, 
+    fontWeight: '700', 
+    color: C.gold 
+  },
+  
+  sideHidden: { 
+    gap: 2, 
+    alignItems: 'center' 
+  },
+});
