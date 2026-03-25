@@ -8,7 +8,7 @@ import { io } from 'socket.io-client';
 import { DominoFace, C, HPAD, HGAP } from './domino';
 import { HandArea }                    from './hand';
 import { BoardArea, TopOpponent, SideOpponent } from './board';
-import { GameLogic } from './utils/GameLogic'; // ← Nouvelle logique
+import { GameLogic } from './GameLogic'; // ← Nouvelle logique
 
 const SERVER_URL = 'https://domino-bloque.onrender.com';
 const { width }  = Dimensions.get('window');
