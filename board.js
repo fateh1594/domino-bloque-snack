@@ -3,9 +3,9 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { DominoFace, C } from './domino';
 import { HiddenDomino } from './hand';
 
-// ── Constantes CORRIGÉES pour dominos plus visibles ─────────────────────────
-const BOARD_W = 1000;
-const BOARD_H = 600;
+// ── Constantes CORRIGÉES ─────────────────────────────────────────────────────
+const BOARD_W = 800;
+const BOARD_H = 500;
 const DOMINO_W = 80;
 const DOMINO_H = 40;
 
@@ -16,30 +16,43 @@ export function BoardArea({
   showLeft, showRight, showCenter,
   onPlaySide, onLayout,
 }) {
-  const minScale = 0.8;
-  const scaleX = boardSize.w > 0 ? boardSize.w / BOARD_W : 1;
-  const scaleY = boardSize.h > 0 ? boardSize.h / BOARD_H : 1;
-  const scale = Math.max(minScale, Math.min(scaleX, scaleY));
+  console.log('🎲 Board render:', {
+    boardLength: board?.length || 0,
+    boardSize,
+    board: board?.slice(0, 3) || []
+  });
 
-  const offsetX = boardSize.w > 0 ? (boardSize.w - BOARD_W * scale) / 2 : 0;
-  const offsetY = boardSize.h > 0 ? (boardSize.h - BOARD_H * scale) / 2 : 0;
+  const scale = Math.min(
+    (boardSize.w || 400) / BOARD_W,
+    (boardSize.h || 300) / BOARD_H
+  );
+  const finalScale = Math.max(0.5, Math.min(1.2, scale));
 
-  const isEmpty = board.length === 0;
+  const offsetX = Math.max(0, ((boardSize.w || 400) - BOARD_W * finalScale) / 2);
+  const offsetY = Math.max(0, ((boardSize.h || 300) - BOARD_H * finalScale) / 2);
+
+  const isEmpty = !board || board.length === 0;
+
+  console.log('📐 Scale info:', { scale, finalScale, offsetX, offsetY });
 
   return (
     <View style={S.boardArea} onLayout={onLayout}>
-      {/* Texture améliorée */}
+      {/* Texture de fond */}
       <View style={S.feltPattern} pointerEvents="none">
-        {[...Array(10)].map((_, i) => (
-          <View key={`h-${i}`} style={[S.feltLineH, { top: `${i * 10}%` }]} />
-        ))}
-        {[...Array(14)].map((_, i) => (
-          <View key={`v-${i}`} style={[S.feltLineV, { left: `${i * 7.2}%` }]} />
+        {[...Array(8)].map((_, i) => (
+          <View key={`line-${i}`} style={[S.feltLine, { top: `${i * 12.5}%` }]} />
         ))}
       </View>
 
+      {/* DEBUG - Afficher info plateau */}
+      <View style={S.debugInfo} pointerEvents="none">
+        <Text style={S.debugText}>
+          Dominos: {board?.length || 0} | Scale: {finalScale.toFixed(2)}
+        </Text>
+      </View>
+
       {/* Plateau vide */}
-      {isEmpty && !selPiece && (
+      {isEmpty && (
         <View style={S.emptyBoard}>
           <View style={S.emptyIcon}>
             <Text style={S.emptyIconTxt}>🎯</Text>
@@ -49,43 +62,56 @@ export function BoardArea({
         </View>
       )}
 
-      {/* DOMINOS SUR LE PLATEAU - TOUS VISIBLES */}
-      {board.map((tile, i) => {
+      {/* DOMINOS SUR LE PLATEAU - VERSION CORRIGÉE */}
+      {board && board.map((tile, i) => {
         const isVertical = tile.rotation === 90;
         
-        const baseWidth = isVertical ? DOMINO_H : DOMINO_W;
-        const baseHeight = isVertical ? DOMINO_W : DOMINO_H;
+        const baseW = isVertical ? DOMINO_H : DOMINO_W;
+        const baseH = isVertical ? DOMINO_W : DOMINO_H;
+        const dominoWidth = Math.max(40, baseW * finalScale);
+        const dominoHeight = Math.max(20, baseH * finalScale);
         
-        const tileWidth = Math.max(60, baseWidth * scale);
-        const tileHeight = Math.max(30, baseHeight * scale);
+        const posX = (tile.x || 0) * finalScale + offsetX;
+        const posY = (tile.y || 0) * finalScale + offsetY;
         
-        const posX = (tile.x || 0) * scale + offsetX;
-        const posY = (tile.y || 0) * scale + offsetY;
-        
-        const pieceA = tile.piece ? tile.piece[0] : (tile.a ?? 0);
-        const pieceB = tile.piece ? tile.piece[1] : (tile.b ?? 0);
+        const valueA = tile.piece?.[0] ?? tile.a ?? 0;
+        const valueB = tile.piece?.[1] ?? tile.b ?? 0;
+
+        console.log(`🎲 Domino ${i}:`, {
+          values: [valueA, valueB],
+          position: { x: posX.toFixed(1), y: posY.toFixed(1) },
+          size: { w: dominoWidth.toFixed(1), h: dominoHeight.toFixed(1) },
+          rotation: tile.rotation,
+          isVertical
+        });
 
         return (
-          <View key={`domino-${i}-${pieceA}-${pieceB}`} style={{
-            position: 'absolute',
-            left: posX,
-            top: posY,
-            zIndex: 10 + i
-          }}>
+          <View 
+            key={`board-domino-${i}-${valueA}-${valueB}`} 
+            style={{
+              position: 'absolute',
+              left: posX,
+              top: posY,
+              zIndex: 20 + i,
+              borderWidth: 1,
+              borderColor: '#ff0000',
+            }}
+          >
             <DominoFace
-              a={pieceA}
-              b={pieceB}
-              w={tileWidth}
-              h={tileHeight}
+              a={valueA}
+              b={valueB}
+              w={dominoWidth}
+              h={dominoHeight}
               vertical={isVertical}
-              borderColor="#333"
+              borderColor="#000"
               borderWidth={2}
               extraStyle={{
+                backgroundColor: '#fff',
+                elevation: 20 + i,
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.4,
-                shadowRadius: 3,
-                elevation: 10 + i,
+                shadowOffset: { width: 2, height: 2 },
+                shadowOpacity: 0.8,
+                shadowRadius: 4,
               }}
             />
           </View>
@@ -106,7 +132,7 @@ export function BoardArea({
         </TouchableOpacity>
       )}
 
-      {/* Zones de placement latérales */}
+      {/* Zones latérales */}
       {(showLeft || showRight) && (
         <>
           {showLeft && (
@@ -194,32 +220,40 @@ const S = StyleSheet.create({
   boardArea: {
     flex: 1,
     position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: '#1a4221',
+    backgroundColor: '#2d5016',
     margin: 4,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#2e5c34',
+    borderColor: '#4a8020',
   },
   
   feltPattern: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    opacity: 0.2,
+    opacity: 0.1,
   },
   
-  feltLineH: {
+  feltLine: {
     position: 'absolute',
     left: 0, right: 0,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+
+  debugInfo: {
+    position: 'absolute',
+    top: 5,
+    left: 5,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    padding: 4,
+    borderRadius: 4,
+    zIndex: 100,
   },
   
-  feltLineV: {
-    position: 'absolute',
-    top: 0, bottom: 0,
-    width: 1,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+  debugText: {
+    color: '#fff',
+    fontSize: 10,
+    fontFamily: 'monospace',
   },
 
   emptyBoard: {
@@ -233,9 +267,9 @@ const S = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: 'rgba(201,168,76,0.15)',
+    backgroundColor: 'rgba(201,168,76,0.2)',
     borderWidth: 2,
-    borderColor: 'rgba(201,168,76,0.4)',
+    borderColor: C.gold,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
@@ -257,71 +291,65 @@ const S = StyleSheet.create({
   centerZone: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(201,168,76,0.1)',
+    backgroundColor: 'rgba(201,168,76,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 5,
   },
   
   centerZoneContent: {
-    backgroundColor: 'rgba(201,168,76,0.2)',
+    backgroundColor: 'rgba(201,168,76,0.3)',
     borderWidth: 3,
     borderColor: C.gold,
     borderRadius: 25,
-    paddingHorizontal: 35,
-    paddingVertical: 18,
+    paddingHorizontal: 30,
+    paddingVertical: 15,
     alignItems: 'center',
     gap: 8,
-    elevation: 10,
   },
   
   centerIcon: { fontSize: 28, color: C.gold },
-  centerText: { fontSize: 18, fontWeight: '900', color: C.gold, letterSpacing: 1.5 },
+  centerText: { fontSize: 18, fontWeight: '900', color: C.gold },
 
   leftZone: {
     position: 'absolute',
     left: 0, top: 0, bottom: 0,
-    width: '30%',
-    backgroundColor: 'rgba(201,168,76,0.1)',
+    width: '25%',
+    backgroundColor: 'rgba(201,168,76,0.15)',
     borderRightWidth: 3,
     borderRightColor: C.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 15,
-    zIndex: 5,
+    gap: 12,
+    zIndex: 10,
   },
   
   rightZone: {
     position: 'absolute',
     right: 0, top: 0, bottom: 0,
-    width: '30%',
-    backgroundColor: 'rgba(201,168,76,0.1)',
+    width: '25%',
+    backgroundColor: 'rgba(201,168,76,0.15)',
     borderLeftWidth: 3,
     borderLeftColor: C.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 15,
-    zIndex: 5,
+    gap: 12,
+    zIndex: 10,
   },
   
-  zoneArrow: { fontSize: 28, fontWeight: '900', color: C.gold },
+  zoneArrow: { fontSize: 24, fontWeight: '900', color: C.gold },
   
   endBadge: {
     backgroundColor: C.gold,
-    borderRadius: 25,
-    minWidth: 45,
-    height: 45,
+    borderRadius: 20,
+    minWidth: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 5,
+    paddingHorizontal: 8,
   },
   
-  endNumber: { fontSize: 24, fontWeight: '900', color: '#1a1200' },
+  endNumber: { fontSize: 20, fontWeight: '900', color: '#1a1200' },
 
   topOpp: {
     paddingVertical: 8,
