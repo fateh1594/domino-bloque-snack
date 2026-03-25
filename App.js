@@ -127,28 +127,41 @@ export default function App() {
     const piece = myHand[idx];
     if (!canPlay(piece)) return showToast('Pièce non jouable');
 
+    // ✅ CORRECTION : Premier domino = toujours jouable
     if (!boardEnds) {
       setSelectedIdx(selectedIdx === idx ? null : idx);
       return;
     }
 
-    const left  = canPlayLeft(piece);
+    const left = canPlayLeft(piece);
     const right = canPlayRight(piece);
 
+    // ✅ CORRECTION : Si un seul côté possible, jouer automatiquement
     if (left && !right) {
       socketRef.current.emit('play_piece', { code: roomCode, piece, side: 'left' });
+      setSelectedIdx(null);
       return;
     }
     if (right && !left) {
       socketRef.current.emit('play_piece', { code: roomCode, piece, side: 'right' });
+      setSelectedIdx(null);
       return;
     }
+    
+    // ✅ Les deux côtés possibles = sélectionner pour choisir
     setSelectedIdx(selectedIdx === idx ? null : idx);
   }
 
   function playSide(side) {
     if (selectedIdx === null) return;
-    socketRef.current.emit('play_piece', { code: roomCode, piece: myHand[selectedIdx], side });
+    const piece = myHand[selectedIdx];
+    
+    // ✅ CORRECTION : Premier domino
+    if (!boardEnds) {
+      socketRef.current.emit('play_piece', { code: roomCode, piece, side: 'right' });
+    } else {
+      socketRef.current.emit('play_piece', { code: roomCode, piece, side });
+    }
     setSelectedIdx(null);
   }
 
