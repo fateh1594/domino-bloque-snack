@@ -8,6 +8,7 @@ import { io } from 'socket.io-client';
 import { DominoFace, C, HPAD, HGAP } from './domino';
 import { HandArea }                    from './hand';
 import { BoardArea, TopOpponent, SideOpponent } from './board';
+import { GameLogic } from './utils/GameLogic'; // ← Nouvelle logique
 
 const SERVER_URL = 'https://domino-bloque.onrender.com';
 const { width }  = Dimensions.get('window');
@@ -35,7 +36,7 @@ export default function App() {
   const [mancheResult, setMancheResult] = useState(null);
   const [gameOver,     setGameOver]     = useState(null);
   const [selectedIdx,  setSelectedIdx]  = useState(null);
-  const [boardSize,    setBoardSize]    = useState({ w: 0, h: 0 });
+  const [boardSize,    setBoardSize]    = useState({ w: 800, h: 400 }); // ← Taille par défaut
   const socketRef = useRef(null);
 
   // ── Socket ────────────────────────────────────────────────────────────────
@@ -107,20 +108,17 @@ export default function App() {
     socketRef.current.emit('join_room', { name: playerName.trim(), code: joinCode.trim().toUpperCase() });
   }
 
+  // ── Logique de jeu améliorée ─────────────────────────────────────────────
   function canPlay(piece) {
-    if (!boardEnds) return true;
-    return piece[0] === boardEnds.left  || piece[1] === boardEnds.left ||
-           piece[0] === boardEnds.right || piece[1] === boardEnds.right;
+    return GameLogic.canPlaceDomino(board, piece, boardEnds);
   }
 
   function canPlayLeft(piece) {
-    if (!boardEnds) return false;
-    return piece[0] === boardEnds.left || piece[1] === boardEnds.left;
+    return GameLogic.canPlaceOnSide(board, piece, boardEnds, 'left');
   }
 
   function canPlayRight(piece) {
-    if (!boardEnds) return false;
-    return piece[0] === boardEnds.right || piece[1] === boardEnds.right;
+    return GameLogic.canPlaceOnSide(board, piece, boardEnds, 'right');
   }
 
   function handleSelect(idx) {
@@ -183,7 +181,7 @@ export default function App() {
   const showRight = isMyTurn && selPiece && board.length > 0 && canPlayRight(selPiece);
   const showCenter= isMyTurn && selPiece && board.length === 0;
 
-  // ── LOBBY ─────────────────────────────────────────────────────────────────
+  // ── LOBBY (GARDÉ INTACT) ─────────────────────────────────────────────────
   if (screen === 'lobby') return (
     <View style={S.bg}>
       <StatusBar hidden />
@@ -248,7 +246,7 @@ export default function App() {
     </View>
   );
 
-  // ── WAITING ───────────────────────────────────────────────────────────────
+  // ── WAITING (GARDÉ INTACT) ───────────────────────────────────────────────
   if (screen === 'waiting') return (
     <View style={[S.bg, { alignItems: 'center', justifyContent: 'center', gap: 14, padding: 20 }]}>
       <StatusBar hidden />
@@ -275,7 +273,7 @@ export default function App() {
     </View>
   );
 
-  // ── GAME ──────────────────────────────────────────────────────────────────
+  // ── GAME (Amélioré avec nouvelle logique) ────────────────────────────────
   return (
     <View style={S.game}>
       <StatusBar hidden />
@@ -315,7 +313,7 @@ export default function App() {
           side="left"
         />
 
-        {/* PLATEAU */}
+        {/* PLATEAU AMÉLIORÉ */}
         <BoardArea
           board={board}
           boardSize={boardSize}
@@ -330,7 +328,7 @@ export default function App() {
             const { width: w, height: h } = e.nativeEvent.layout;
             setBoardSize({ w, h });
             if (socketRef.current && roomCode) {
-              socketRef.current.emit('board_size', { code: roomCode, width: 1000, height: 600 });
+              socketRef.current.emit('board_size', { code: roomCode, width: w, height: h });
             }
           }}
         />
@@ -417,7 +415,7 @@ export default function App() {
   );
 }
 
-// ── STYLES ────────────────────────────────────────────────────────────────────
+// ── STYLES (GARDÉS INTACTS) ──────────────────────────────────────────────────
 const S = StyleSheet.create({
   // Lobby
   bg:          { flex: 1, backgroundColor: C.bg },
