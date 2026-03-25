@@ -4,10 +4,10 @@ import { DominoFace, C } from './domino';
 import { HiddenDomino } from './hand';
 
 // ── Constantes corrigées ─────────────────────────────────────────────────────
-const BOARD_W = 800; // Taille virtuelle du plateau
+const BOARD_W = 800;
 const BOARD_H = 500;
-const DOMINO_W = 60; // Largeur domino horizontal sur plateau
-const DOMINO_H = 30; // Hauteur domino horizontal sur plateau
+const DOMINO_W = 60;
+const DOMINO_H = 30;
 
 // ── Plateau corrigé ──────────────────────────────────────────────────────────
 export function BoardArea({
@@ -16,12 +16,10 @@ export function BoardArea({
   showLeft, showRight, showCenter,
   onPlaySide, onLayout,
 }) {
-  // Scale adaptatif pour maintenir les proportions
   const scaleX = boardSize.w > 0 ? boardSize.w / BOARD_W : 1;
   const scaleY = boardSize.h > 0 ? boardSize.h / BOARD_H : 1;
-  const scale = Math.min(scaleX, scaleY) * 0.9; // Garde une marge
+  const scale = Math.min(scaleX, scaleY) * 0.9;
 
-  // Centrage du contenu
   const offsetX = boardSize.w > 0 ? (boardSize.w - BOARD_W * scale) / 2 : 0;
   const offsetY = boardSize.h > 0 ? (boardSize.h - BOARD_H * scale) / 2 : 0;
 
@@ -54,11 +52,9 @@ export function BoardArea({
       {board.map((tile, i) => {
         const isVertical = tile.rotation === 90;
         
-        // Taille adaptée au scale
         const tileWidth = (isVertical ? DOMINO_H : DOMINO_W) * scale;
         const tileHeight = (isVertical ? DOMINO_W : DOMINO_H) * scale;
         
-        // Position adaptée
         const posX = ((tile.x || 0) / BOARD_W) * BOARD_W * scale + offsetX;
         const posY = ((tile.y || 0) / BOARD_H) * BOARD_H * scale + offsetY;
         
@@ -140,7 +136,6 @@ export function BoardArea({
   );
 }
 
-// ── Adversaires (inchangés) ──────────────────────────────────────────────────
 export function TopOpponent({ player, handCount, isCurrentTurn }) {
   if (!player) return null;
   const count = handCount ?? 7;
@@ -191,7 +186,6 @@ export function SideOpponent({ player, handCount, isCurrentTurn, side }) {
   );
 }
 
-// ── Styles améliorés ─────────────────────────────────────────────────────────
 const S = StyleSheet.create({
   boardArea: {
     flex: 1,
@@ -324,7 +318,6 @@ const S = StyleSheet.create({
   
   endNumber: { fontSize: 22, fontWeight: '900', color: '#1a1200' },
 
-  // Styles adversaires (inchangés)
   topOpp: {
     paddingVertical: 8,
     paddingHorizontal: 12,
