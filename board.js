@@ -12,9 +12,77 @@ export function BoardArea({
 }) {
   const [dominoPositions, setDominoPositions] = useState([]);
 
+  // Fonction de calcul de serpent intelligent
+  function calculateSmartBoardLayout(board, boardSize) {
+    if (!board || board.length === 0) return [];
+    
+    const positions = [];
+    const DOMINO_WIDTH = 60;
+    const DOMINO_HEIGHT = 30;
+    const MARGIN = 8;
+    const MAX_WIDTH = (boardSize.w || 800) - 100;
+    
+    let currentX = 0;
+    let currentY = 0;
+    let direction = 1; // 1 = droite, -1 = gauche
+    let lineStartX = 0;
+    
+    board.forEach((piece, index) => {
+      const values = GameLogic.extractDominoValues ? 
+        GameLogic.extractDominoValues(piece) : 
+        { a: piece[0], b: piece[1] };
+      
+      const isDouble = values.a === values.b;
+      const width = isDouble ? DOMINO_HEIGHT : DOMINO_WIDTH;
+      const height = isDouble ? DOMINO_WIDTH : DOMINO_HEIGHT;
+      
+      // Premier domino au centre
+      if (index === 0) {
+        currentX = MAX_WIDTH / 2 - width / 2;
+        lineStartX = currentX;
+        positions.push({
+          x: currentX,
+          y: currentY,
+          width,
+          height,
+          rotation: 0
+        });
+        currentX += width + MARGIN;
+        return;
+      }
+      
+      // Vérifier si on dépasse la largeur
+      if (direction > 0 && currentX + width > MAX_WIDTH) {
+        currentY += height + MARGIN;
+        direction = -1;
+        currentX = MAX_WIDTH - width;
+      } else if (direction < 0 && currentX < 0) {
+        currentY += height + MARGIN;
+        direction = 1;
+        currentX = lineStartX;
+      }
+      
+      positions.push({
+        x: currentX,
+        y: currentY,
+        width,
+        height,
+        rotation: 0
+      });
+      
+      if (direction > 0) {
+        currentX += width + MARGIN;
+      } else {
+        currentX -= width + MARGIN;
+      }
+    });
+    
+    return positions;
+  }
+
   useEffect(() => {
     if (board && board.length > 0) {
-      const positions = GameLogic.calculateBoardLayout(board, boardSize);
+      const positions = calculateSmartBoardLayout(board, boardSize);
       setDominoPositions(positions);
     } else {
       setDominoPositions([]);
@@ -45,10 +113,12 @@ export function BoardArea({
 
       <ScrollView
         style={S.boardScroll}
-        contentContainerStyle={S.boardContent}
-        horizontal
+        contentContainerStyle={[S.boardContent, { 
+          minHeight: Math.max(600, (dominoPositions[dominoPositions.length - 1]?.y || 0) + 200) 
+        }]}
+        horizontal={false}
         showsHorizontalScrollIndicator={false}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
         minimumZoomScale={0.3}
         maximumZoomScale={1.5}
         bouncesZoom
@@ -72,7 +142,9 @@ export function BoardArea({
 
           {dominoPositions.map((position, i) => {
             const tile = board[i];
-            const values = GameLogic.extractDominoValues(tile);
+            const values = GameLogic.extractDominoValues ? 
+              GameLogic.extractDominoValues(tile) : 
+              { a: tile[0], b: tile[1] };
             const isDouble = values.a === values.b;
 
             return (
@@ -143,9 +215,14 @@ export function BoardArea({
 
       {(showLeft || showRight) && (
         <>
-          {showLeft && (
+          {showLeft && dominoPositions[0] && (
             <TouchableOpacity 
-              style={S.leftZone} 
+              style={[S.leftZone, {
+                left: Math.max(0, dominoPositions[0].x - 80),
+                top: dominoPositions[0].y,
+                width: 70,
+                height: 60
+              }]} 
               onPress={() => onPlaySide('left')} 
               activeOpacity={0.7}
             >
@@ -153,17 +230,20 @@ export function BoardArea({
               <View style={S.endBadge}>
                 <Text style={S.endNumber}>{boardEnds?.left || 0}</Text>
               </View>
-              <Text style={S.zoneLabel}>GAUCHE</Text>
             </TouchableOpacity>
           )}
           
-          {showRight && (
+          {showRight && dominoPositions.length > 0 && (
             <TouchableOpacity 
-              style={S.rightZone} 
+              style={[S.rightZone, {
+                left: dominoPositions[dominoPositions.length - 1].x + dominoPositions[dominoPositions.length - 1].width + 10,
+                top: dominoPositions[dominoPositions.length - 1].y,
+                width: 70,
+                height: 60
+              }]} 
               onPress={() => onPlaySide('right')} 
               activeOpacity={0.7}
             >
-              <Text style={S.zoneLabel}>DROITE</Text>
               <View style={S.endBadge}>
                 <Text style={S.endNumber}>{boardEnds?.right || 0}</Text>
               </View>
@@ -292,7 +372,7 @@ const S = StyleSheet.create({
   },
 
   boardContent: {
-    minWidth: 1200,
+    minWidth: 800,
     minHeight: 600,
   },
 
@@ -428,34 +508,28 @@ const S = StyleSheet.create({
 
   leftZone: {
     position: 'absolute',
-    left: 0, top: 0, bottom: 0,
-    width: '25%',
-    backgroundColor: 'rgba(255,100,100,0.2)',
-    borderRightWidth: 4,
-    borderRightColor: C.gold,
+    backgroundColor: 'rgba(255,100,100,0.8)',
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 4,
     zIndex: 10,
   },
   
   rightZone: {
     position: 'absolute',
-    right: 0, top: 0, bottom: 0,
-    width: '25%',
-    backgroundColor: 'rgba(100,255,100,0.2)',
-    borderLeftWidth: 4,
-    borderLeftColor: C.gold,
+    backgroundColor: 'rgba(100,255,100,0.8)',
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 4,
     zIndex: 10,
   },
   
   zoneArrow: { 
-    fontSize: 32, 
+    fontSize: 16, 
     fontWeight: '900', 
-    color: C.gold,
+    color: '#fff',
   },
 
   zoneLabel: {
@@ -467,21 +541,21 @@ const S = StyleSheet.create({
   
   endBadge: {
     backgroundColor: C.gold,
-    borderRadius: 30,
-    minWidth: 60,
-    height: 60,
+    borderRadius: 15,
+    minWidth: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 6,
     elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowRadius: 3,
   },
   
   endNumber: { 
-    fontSize: 28, 
+    fontSize: 14, 
     fontWeight: '900', 
     color: '#000',
   },
