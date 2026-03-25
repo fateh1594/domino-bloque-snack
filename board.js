@@ -3,11 +3,11 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { DominoFace, C } from './domino';
 import { HiddenDomino } from './hand';
 
-// ── Constantes corrigées ─────────────────────────────────────────────────────
-const BOARD_W = 800;
-const BOARD_H = 500;
-const DOMINO_W = 60;
-const DOMINO_H = 30;
+// ── Constantes CORRIGÉES pour dominos plus visibles ─────────────────────────
+const BOARD_W = 1000;
+const BOARD_H = 600;
+const DOMINO_W = 80;
+const DOMINO_H = 40;
 
 // ── Plateau corrigé ──────────────────────────────────────────────────────────
 export function BoardArea({
@@ -16,9 +16,10 @@ export function BoardArea({
   showLeft, showRight, showCenter,
   onPlaySide, onLayout,
 }) {
+  const minScale = 0.8;
   const scaleX = boardSize.w > 0 ? boardSize.w / BOARD_W : 1;
   const scaleY = boardSize.h > 0 ? boardSize.h / BOARD_H : 1;
-  const scale = Math.min(scaleX, scaleY) * 0.9;
+  const scale = Math.max(minScale, Math.min(scaleX, scaleY));
 
   const offsetX = boardSize.w > 0 ? (boardSize.w - BOARD_W * scale) / 2 : 0;
   const offsetY = boardSize.h > 0 ? (boardSize.h - BOARD_H * scale) / 2 : 0;
@@ -29,11 +30,11 @@ export function BoardArea({
     <View style={S.boardArea} onLayout={onLayout}>
       {/* Texture améliorée */}
       <View style={S.feltPattern} pointerEvents="none">
-        {[...Array(12)].map((_, i) => (
-          <View key={`h-${i}`} style={[S.feltLineH, { top: `${i * 8.5}%` }]} />
+        {[...Array(10)].map((_, i) => (
+          <View key={`h-${i}`} style={[S.feltLineH, { top: `${i * 10}%` }]} />
         ))}
-        {[...Array(16)].map((_, i) => (
-          <View key={`v-${i}`} style={[S.feltLineV, { left: `${i * 6.25}%` }]} />
+        {[...Array(14)].map((_, i) => (
+          <View key={`v-${i}`} style={[S.feltLineV, { left: `${i * 7.2}%` }]} />
         ))}
       </View>
 
@@ -48,25 +49,28 @@ export function BoardArea({
         </View>
       )}
 
-      {/* Dominos sur le plateau */}
+      {/* DOMINOS SUR LE PLATEAU - TOUS VISIBLES */}
       {board.map((tile, i) => {
         const isVertical = tile.rotation === 90;
         
-        const tileWidth = (isVertical ? DOMINO_H : DOMINO_W) * scale;
-        const tileHeight = (isVertical ? DOMINO_W : DOMINO_H) * scale;
+        const baseWidth = isVertical ? DOMINO_H : DOMINO_W;
+        const baseHeight = isVertical ? DOMINO_W : DOMINO_H;
         
-        const posX = ((tile.x || 0) / BOARD_W) * BOARD_W * scale + offsetX;
-        const posY = ((tile.y || 0) / BOARD_H) * BOARD_H * scale + offsetY;
+        const tileWidth = Math.max(60, baseWidth * scale);
+        const tileHeight = Math.max(30, baseHeight * scale);
+        
+        const posX = (tile.x || 0) * scale + offsetX;
+        const posY = (tile.y || 0) * scale + offsetY;
         
         const pieceA = tile.piece ? tile.piece[0] : (tile.a ?? 0);
         const pieceB = tile.piece ? tile.piece[1] : (tile.b ?? 0);
 
         return (
-          <View key={`domino-${i}`} style={{
+          <View key={`domino-${i}-${pieceA}-${pieceB}`} style={{
             position: 'absolute',
             left: posX,
             top: posY,
-            zIndex: 5
+            zIndex: 10 + i
           }}>
             <DominoFace
               a={pieceA}
@@ -74,14 +78,14 @@ export function BoardArea({
               w={tileWidth}
               h={tileHeight}
               vertical={isVertical}
-              borderColor="#444"
-              borderWidth={Math.max(1, scale * 1.5)}
+              borderColor="#333"
+              borderWidth={2}
               extraStyle={{
                 shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.3,
-                shadowRadius: 2,
-                elevation: 5,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.4,
+                shadowRadius: 3,
+                elevation: 10 + i,
               }}
             />
           </View>
@@ -92,7 +96,7 @@ export function BoardArea({
       {showCenter && (
         <TouchableOpacity 
           style={S.centerZone} 
-          onPress={() => onPlaySide('center')} 
+          onPress={() => onPlaySide('right')}
           activeOpacity={0.7}
         >
           <View style={S.centerZoneContent}>
@@ -201,122 +205,123 @@ const S = StyleSheet.create({
   feltPattern: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    opacity: 0.3,
+    opacity: 0.2,
   },
   
   feltLineH: {
     position: 'absolute',
     left: 0, right: 0,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
   },
   
   feltLineV: {
     position: 'absolute',
     top: 0, bottom: 0,
     width: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
   },
 
   emptyBoard: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 12,
   },
   
   emptyIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: 'rgba(201,168,76,0.15)',
     borderWidth: 2,
     borderColor: 'rgba(201,168,76,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   
-  emptyIconTxt: { fontSize: 28 },
+  emptyIconTxt: { fontSize: 32 },
   
   emptyTxt: {
-    color: C.dim,
-    fontSize: 14,
-    fontWeight: '600',
+    color: C.gold,
+    fontSize: 16,
+    fontWeight: '700',
   },
   
   emptyHint: {
-    color: 'rgba(138,173,142,0.6)',
-    fontSize: 12,
+    color: C.dim,
+    fontSize: 13,
   },
 
   centerZone: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(201,168,76,0.15)',
+    backgroundColor: 'rgba(201,168,76,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
+    zIndex: 5,
   },
   
   centerZoneContent: {
-    backgroundColor: 'rgba(201,168,76,0.25)',
-    borderWidth: 2,
+    backgroundColor: 'rgba(201,168,76,0.2)',
+    borderWidth: 3,
     borderColor: C.gold,
-    borderRadius: 20,
-    paddingHorizontal: 30,
-    paddingVertical: 15,
+    borderRadius: 25,
+    paddingHorizontal: 35,
+    paddingVertical: 18,
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+    elevation: 10,
   },
   
-  centerIcon: { fontSize: 24, color: C.gold },
-  centerText: { fontSize: 16, fontWeight: '800', color: C.gold, letterSpacing: 1 },
+  centerIcon: { fontSize: 28, color: C.gold },
+  centerText: { fontSize: 18, fontWeight: '900', color: C.gold, letterSpacing: 1.5 },
 
   leftZone: {
     position: 'absolute',
     left: 0, top: 0, bottom: 0,
-    width: '35%',
-    backgroundColor: 'rgba(201,168,76,0.15)',
-    borderRightWidth: 2,
-    borderRightColor: 'rgba(201,168,76,0.4)',
+    width: '30%',
+    backgroundColor: 'rgba(201,168,76,0.1)',
+    borderRightWidth: 3,
+    borderRightColor: C.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    zIndex: 10,
+    gap: 15,
+    zIndex: 5,
   },
   
   rightZone: {
     position: 'absolute',
     right: 0, top: 0, bottom: 0,
-    width: '35%',
-    backgroundColor: 'rgba(201,168,76,0.15)',
-    borderLeftWidth: 2,
-    borderLeftColor: 'rgba(201,168,76,0.4)',
+    width: '30%',
+    backgroundColor: 'rgba(201,168,76,0.1)',
+    borderLeftWidth: 3,
+    borderLeftColor: C.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    zIndex: 10,
+    gap: 15,
+    zIndex: 5,
   },
   
-  zoneArrow: { fontSize: 22, fontWeight: '900', color: C.gold },
+  zoneArrow: { fontSize: 28, fontWeight: '900', color: C.gold },
   
   endBadge: {
     backgroundColor: C.gold,
-    borderRadius: 22,
-    minWidth: 40,
-    height: 40,
+    borderRadius: 25,
+    minWidth: 45,
+    height: 45,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
-    elevation: 6,
+    paddingHorizontal: 10,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
   },
   
-  endNumber: { fontSize: 22, fontWeight: '900', color: '#1a1200' },
+  endNumber: { fontSize: 24, fontWeight: '900', color: '#1a1200' },
 
   topOpp: {
     paddingVertical: 8,
