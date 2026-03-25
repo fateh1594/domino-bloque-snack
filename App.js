@@ -1,3 +1,4 @@
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, StatusBar, ScrollView, Platform } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, StatusBar, ScrollView, Platform } from 'react-native';
 import { io } from 'socket.io-client';
@@ -33,135 +34,133 @@ export default function App() {
   const socketRef = useRef(null);
 
   useEffect(() => {
-    console.log('🔌 DÉBUT CONNEXION');
-    console.log('🔌 Vers:', SERVER_URL);
-    
-    const socket = io(SERVER_URL, {
-      transports: ['polling', 'websocket'],
-      upgrade: true,
-      timeout: 20000,
-      forceNew: true,
-      autoConnect: true
-    });
-    
-    socketRef.current = socket;
-    socket.connect();
-    console.log('🔌 Connexion forcée');
+  console.log('🔌 CONNEXION FORCÉE HTTP POLLING');
+  
+  const socket = io(SERVER_URL, {
+    transports: ['polling'],
+    upgrade: false,
+    rememberUpgrade: false,
+    timeout: 30000,
+    autoConnect: false,
+    forceNew: true
+  });
+  
+  socketRef.current = socket;
+  socket.connect();
 
-    socket.on('connect', () => {
-      console.log('✅ CONNECTÉ !');
-      console.log('✅ ID:', socket.id);
-    });
+  socket.on('connect', () => {
+    console.log('✅ CONNECTÉ EN HTTP !', socket.id);
+  });
 
-    socket.on('connect_error', (error) => {
-      console.log('🚨 ERREUR:', error.message);
-      setTimeout(() => {
-        console.log('🔄 Retry...');
-        socket.connect();
-      }, 2000);
-    });
+  socket.on('connect_error', (err) => {
+    console.log('🚨 ÉCHEC HTTP:', err.message);
+  });
 
-    socket.on('disconnect', (reason) => {
-      console.log('❌ Déco:', reason);
-    });
+  socket.on('disconnect', (reason) => {
+    console.log('❌ Déconnecté:', reason);
+  });
 
-    const interval = setInterval(() => {
-      console.log('🔍', socket.connected ? 'CONNECTÉ' : 'DÉCONNECTÉ');
-    }, 2000);
+  const forceConnect = setInterval(() => {
+    if (!socket.connected) {
+      console.log('🔄 Force reconnexion...');
+      socket.connect();
+    }
+  }, 5000);
 
-    socket.on('room_created', (data) => {
-      console.log('✅ SALLE CRÉÉE:', data);
-      setMe(data.player);
-      setPlayers(data.players);
-      setRoomCode(data.code);
-      setScreen('waiting');
-    });
+  // TOUS TES ÉVÉNEMENTS EXISTANTS
+  socket.on('room_created', (data) => {
+    console.log('✅ SALLE CRÉÉE:', data);
+    setMe(data.player);
+    setPlayers(data.players);
+    setRoomCode(data.code);
+    setScreen('waiting');
+  });
 
-    socket.on('room_joined', ({ code, player, players: pl, maxPlayers: mp }) => {
-      setMe(player);
-      setPlayers(pl);
-      setRoomCode(code);
-      if (mp) setMaxPlayers(mp);
-      setScreen('waiting');
-    });
+  socket.on('room_joined', ({ code, player, players: pl, maxPlayers: mp }) => {
+    setMe(player);
+    setPlayers(pl);
+    setRoomCode(code);
+    if (mp) setMaxPlayers(mp);
+    setScreen('waiting');
+  });
 
-    socket.on('player_joined', ({ players: pl }) => {
-      setPlayers(pl);
-    });
+  socket.on('player_joined', ({ players: pl }) => {
+    setPlayers(pl);
+  });
 
-    socket.on('manche_start', ({ hand, currentTurn: ct, scores: sc, board: b, boardEnds: be, pioireLeft: pl }) => {
-      setMyHand(hand);
-      setCurrentTurn(ct);
-      setScores(sc);
-      setBoard(b || []);
-      setBoardEnds(be);
-      setPioireLeft(pl || 0);
-      setSelectedIdx(null);
-      setMancheResult(null);
-      setGameOver(null);
-      setScreen('game');
-      if (ct === socket.id) showToast('🎯 Vous commencez !');
-    });
+  socket.on('manche_start', ({ hand, currentTurn: ct, scores: sc, board: b, boardEnds: be, pioireLeft: pl }) => {
+    setMyHand(hand);
+    setCurrentTurn(ct);
+    setScores(sc);
+    setBoard(b || []);
+    setBoardEnds(be);
+    setPioireLeft(pl || 0);
+    setSelectedIdx(null);
+    setMancheResult(null);
+    setGameOver(null);
+    setScreen('game');
+    if (ct === socket.id) showToast('🎯 Vous commencez !');
+  });
 
-    socket.on('piece_played', ({ playerId, board: b, boardEnds: be, handCounts: hc }) => {
-      setBoard(b);
-      setBoardEnds(be);
-      setHandCounts(hc);
-      if (playerId !== socket.id) showToast('Domino joué');
-    });
+  socket.on('piece_played', ({ playerId, board: b, boardEnds: be, handCounts: hc }) => {
+    setBoard(b);
+    setBoardEnds(be);
+    setHandCounts(hc);
+    if (playerId !== socket.id) showToast('Domino joué');
+  });
 
-    socket.on('hand_update', ({ hand }) => {
-      setMyHand(hand);
-      setSelectedIdx(null);
-    });
+  socket.on('hand_update', ({ hand }) => {
+    setMyHand(hand);
+    setSelectedIdx(null);
+  });
 
-    socket.on('turn_change', ({ currentTurn: ct, skipped, pioireLeft: pl }) => {
-      setCurrentTurn(ct);
-      setSelectedIdx(null);
-      if (pl !== undefined) setPioireLeft(pl);
-      if (skipped?.length > 0) showToast('Un joueur passe');
-    });
+  socket.on('turn_change', ({ currentTurn: ct, skipped, pioireLeft: pl }) => {
+    setCurrentTurn(ct);
+    setSelectedIdx(null);
+    if (pl !== undefined) setPioireLeft(pl);
+    if (skipped?.length > 0) showToast('Un joueur passe son tour');
+  });
 
-    socket.on('forced_pass', () => {
-      showToast('Vous passez votre tour');
-    });
+  socket.on('forced_pass', () => {
+    showToast('Vous passez votre tour');
+  });
 
-    socket.on('piece_drawn', ({ hand }) => {
-      setMyHand(hand);
-      showToast('Pièce piochée !');
-    });
+  socket.on('piece_drawn', ({ hand }) => {
+    setMyHand(hand);
+    showToast('Pièce piochée !');
+  });
 
-    socket.on('draw_happened', ({ handCounts: hc, pioireLeft: pl }) => {
-      setHandCounts(hc);
-      setPioireLeft(pl);
-    });
+  socket.on('draw_happened', ({ handCounts: hc, pioireLeft: pl }) => {
+    setHandCounts(hc);
+    setPioireLeft(pl);
+  });
 
-    socket.on('manche_end', ({ winTeam, points, scores: sc }) => {
-      setScores(sc);
-      setMancheResult({ winTeam, points, scores: sc });
-    });
+  socket.on('manche_end', ({ winTeam, points, scores: sc }) => {
+    setScores(sc);
+    setMancheResult({ winTeam, points, scores: sc });
+  });
 
-    socket.on('game_over', ({ winTeam, scores: sc }) => {
-      setScores(sc);
-      setGameOver({ winTeam, scores: sc });
-    });
+  socket.on('game_over', ({ winTeam, scores: sc }) => {
+    setScores(sc);
+    setGameOver({ winTeam, scores: sc });
+  });
 
-    socket.on('player_left', ({ players: pl, msg }) => {
-      setPlayers(pl);
-      showToast(msg);
-    });
+  socket.on('player_left', ({ players: pl, msg }) => {
+    setPlayers(pl);
+    showToast(msg);
+  });
 
-    socket.on('error', (data) => {
-      console.log('🚨 ERREUR SERVEUR:', data.msg);
-      setError(data.msg || 'Erreur serveur');
-    });
+  socket.on('error', (data) => {
+    console.log('🚨 ERREUR SERVEUR:', data.msg);
+    setError(data.msg || 'Erreur serveur');
+  });
 
-    return () => {
-      console.log('🔌 Nettoyage');
-      clearInterval(interval);
-      socket.disconnect();
-    };
-  }, []);
+  return () => {
+    clearInterval(forceConnect);
+    socket.disconnect();
+  };
+}, []);
+
 
   function showToast(msg) {
     setToast(msg);
