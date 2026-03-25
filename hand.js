@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { DominoFace, C, HDW, HDH, HPAD, HGAP } from './domino';
-import { GameLogic } from './utils/GameLogic'; // ← Nouvelle logique
+import { GameLogic } from './GameLogic';
 
 export function HiddenDomino({ w, h }) {
   return (
@@ -54,7 +54,6 @@ export function HandArea({
           </Text>
         </View>
 
-        {/* Bouton piocher amélioré */}
         {needToDraw && pioireLeft > 0 && (
           <TouchableOpacity 
             style={S.drawBtn} 
@@ -69,7 +68,6 @@ export function HandArea({
           </TouchableOpacity>
         )}
 
-        {/* Bouton annuler amélioré */}
         {selectedIdx !== null && (
           <TouchableOpacity style={S.cancelBtn} onPress={onCancelSelect}>
             <Text style={S.cancelText}>✕</Text>
@@ -77,7 +75,6 @@ export function HandArea({
         )}
       </View>
 
-      {/* Main du joueur avec indicateurs améliorés */}
       <View style={S.handRow}>
         {myHand.map((piece, idx) => {
           const isSelected = selectedIdx === idx;
@@ -111,26 +108,21 @@ export function HandArea({
                 }}
               />
               
-              {/* Glow de sélection */}
               {isSelected && <View style={S.selectedGlow} />}
               
-              {/* Indicateurs visuels améliorés */}
               {isMyTurn && (
                 <>
-                  {/* Indicateur de jouabilité */}
                   <View style={[
                     S.playIndicator,
                     { backgroundColor: isPlayable ? C.green : '#666' }
                   ]} />
                   
-                  {/* Badge pour les doubles */}
                   {isDouble && (
                     <View style={S.doubleBadge}>
                       <Text style={S.doubleBadgeText}>×2</Text>
                     </View>
                   )}
                   
-                  {/* Valeur totale du domino */}
                   <View style={S.valueBadge}>
                     <Text style={S.valueBadgeText}>{piece[0] + piece[1]}</Text>
                   </View>
@@ -141,7 +133,6 @@ export function HandArea({
         })}
       </View>
 
-      {/* Aide contextuelle */}
       {isMyTurn && (
         <View style={S.helpRow}>
           {selectedIdx !== null ? (
@@ -314,7 +305,6 @@ const S = StyleSheet.create({
     backgroundColor: 'rgba(201,168,76,0.1)',
   },
 
-  // Nouveaux indicateurs visuels
   playIndicator: {
     position: 'absolute',
     top: -3,
