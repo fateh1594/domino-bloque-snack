@@ -1,17 +1,6 @@
 {
-  "name": "domino-bloque-server",
-  "version": "1.0.0",
-  "description": "Serveur pour le jeu Domino Bloqué",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
   "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.8.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "license": "MIT"
+    "socket.io-client": "4.8.3",
+    "expo-linear-gradient": "~15.0.8"
+  }
 }
