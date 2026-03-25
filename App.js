@@ -255,4 +255,231 @@ export default function App() {
       <Text style={S.wLbl}>CODE DE LA SALLE</Text>
       <Text style={S.wCode}>{roomCode}</Text>
       <Text style={S.wHint}>Partagez ce code avec vos amis</Text>
-      <View style={{ width: '100%',
+      <View style={{ width: '100%', maxWidth: 360, gap: 10 }}>
+        {Array.from({ length: maxPlayers }).map((_, i) => {
+          const p = players[i];
+          return (
+            <View key={i} style={[S.slot, p && S.slotOn]}>
+              {p ? <>
+                <View style={S.av}><Text style={S.avTxt}>{p.name[0].toUpperCase()}</Text></View>
+                <Text style={S.pName}>{p.name}{p.id === socketRef.current?.id ? ' (vous)' : ''}</Text>
+                {maxPlayers === 4 && <Text style={S.tBadge}>ÉQ. {p.team + 1}</Text>}
+              </> : <>
+                <View style={S.spin} /><Text style={S.wTxt}>En attente…</Text>
+              </>}
+            </View>
+          );
+        })}
+      </View>
+      <Text style={{ fontSize: 13, color: C.dim }}>{players.length}/{maxPlayers} joueurs</Text>
+    </View>
+  );
+
+  // ── GAME ──────────────────────────────────────────────────────────────────
+  return (
+    <View style={S.game}>
+      <StatusBar hidden />
+
+      {/* SCORES */}
+      <View style={S.header}>
+        <View style={S.scoreBox}>
+          <Text style={S.sLbl}>NOUS</Text>
+          <Text style={S.sVal}>
+            {scores[me?.team ?? 0]}<Text style={S.sMax}>/100</Text>
+          </Text>
+        </View>
+        <Text style={S.sX}>✕</Text>
+        <View style={S.scoreBox}>
+          <Text style={[S.sLbl, { color: C.red }]}>RIVAUX</Text>
+          <Text style={[S.sVal, { color: C.red }]}>
+            {scores[me?.team === 0 ? 1 : 0]}<Text style={S.sMax}>/100</Text>
+          </Text>
+        </View>
+      </View>
+
+      {/* ADVERSAIRE HAUT */}
+      <TopOpponent
+        player={topPlayer}
+        handCount={handCounts[topPlayer?.id]}
+        isCurrentTurn={topPlayer?.id === currentTurn}
+      />
+
+      {/* MILIEU */}
+      <View style={S.middleRow}>
+
+        {/* GAUCHE */}
+        <SideOpponent
+          player={leftPlayer}
+          handCount={handCounts[leftPlayer?.id]}
+          isCurrentTurn={leftPlayer?.id === currentTurn}
+          side="left"
+        />
+
+        {/* PLATEAU */}
+        <BoardArea
+          board={board}
+          boardSize={boardSize}
+          boardEnds={boardEnds}
+          isMyTurn={isMyTurn}
+          selPiece={selPiece}
+          showLeft={showLeft}
+          showRight={showRight}
+          showCenter={showCenter}
+          onPlaySide={playSide}
+          onLayout={e => {
+            const { width: w, height: h } = e.nativeEvent.layout;
+            setBoardSize({ w, h });
+            if (socketRef.current && roomCode) {
+              socketRef.current.emit('board_size', { code: roomCode, width: 1000, height: 600 });
+            }
+          }}
+        />
+
+        {/* DROITE */}
+        <SideOpponent
+          player={rightPlayer}
+          handCount={handCounts[rightPlayer?.id]}
+          isCurrentTurn={rightPlayer?.id === currentTurn}
+          side="right"
+        />
+      </View>
+
+      {/* MAIN */}
+      <HandArea
+        myHand={myHand}
+        me={me}
+        isMyTurn={isMyTurn}
+        needToDraw={needToDraw}
+        pioireLeft={pioireLeft}
+        selectedIdx={selectedIdx}
+        currentTurn={currentTurn}
+        players={players}
+        canPlay={canPlay}
+        onSelect={handleSelect}
+        onDraw={drawPiece}
+        onCancelSelect={() => setSelectedIdx(null)}
+      />
+
+      {/* TOAST */}
+      {!!toast && (
+        <View style={S.toast}><Text style={S.toastTxt}>{toast}</Text></View>
+      )}
+
+      {/* OVERLAY MANCHE */}
+      {mancheResult && !gameOver && (
+        <View style={S.overlay}>
+          <View style={S.ovCard}>
+            <Text style={S.ovTitle}>
+              {mancheResult.winTeam === me?.team ? '🎉 Votre équipe gagne !'
+                : mancheResult.winTeam === -1 ? 'Égalité !'
+                : '😔 Équipe adverse gagne'}
+            </Text>
+            <Text style={S.ovPts}>+{mancheResult.points} points</Text>
+            <View style={S.ovScores}>
+              {[0, 1].map(t => (
+                <View key={t} style={{ alignItems: 'center' }}>
+                  <Text style={S.ovTN}>{teamName(t)}</Text>
+                  <Text style={S.ovTV}>{mancheResult.scores[t]}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={S.ovHint}>Prochaine manche dans quelques secondes…</Text>
+          </View>
+        </View>
+      )}
+
+      {/* OVERLAY FIN DE PARTIE */}
+      {gameOver && (
+        <View style={S.overlay}>
+          <View style={S.ovCard}>
+            <Text style={S.ovTitle}>
+              {gameOver.winTeam === me?.team ? '🏆 VICTOIRE !' : '💀 DÉFAITE'}
+            </Text>
+            <Text style={S.ovPts}>
+              {gameOver.winTeam === me?.team ? 'Félicitations !' : "L'équipe adverse a gagné"}
+            </Text>
+            <View style={S.ovScores}>
+              {[0, 1].map(t => (
+                <View key={t} style={{ alignItems: 'center' }}>
+                  <Text style={S.ovTN}>{teamName(t)}</Text>
+                  <Text style={S.ovTV}>{gameOver.scores[t]}</Text>
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity style={[S.btnGold, { marginTop: 16, width: '100%' }]}
+              onPress={() => setScreen('lobby')}>
+              <Text style={S.btnGoldTxt}>Nouvelle partie</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── STYLES ────────────────────────────────────────────────────────────────────
+const S = StyleSheet.create({
+  // Lobby
+  bg:          { flex: 1, backgroundColor: C.bg },
+  lobbyScroll: { padding: 20, paddingBottom: 40, alignItems: 'center' },
+  logoWrap:    { alignItems: 'center', marginBottom: 20, marginTop: 16 },
+  t1: { fontSize: 44, fontWeight: '900', color: '#fff', letterSpacing: 4 },
+  t2: { fontSize: 20, fontWeight: '700', color: C.gold, letterSpacing: 10, marginTop: 2 },
+  connRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  connDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4caf50' },
+  connTxt: { fontSize: 12, color: C.dim },
+  card:    { width: '100%', maxWidth: 400, backgroundColor: 'rgba(26,69,32,0.5)', borderWidth: 1, borderColor: C.border, borderRadius: 16, padding: 16, marginBottom: 12 },
+  lbl:     { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: C.dim, marginBottom: 8, textTransform: 'uppercase' },
+  inp:     { height: 48, backgroundColor: 'rgba(15,40,18,0.8)', borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.text, fontSize: 15, paddingHorizontal: 16 },
+  mBtn:    { flex: 1, height: 58, backgroundColor: 'rgba(15,40,18,0.6)', borderWidth: 2, borderColor: C.border, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  mBtnOn:  { borderColor: C.gold, backgroundColor: 'rgba(201,168,76,0.15)' },
+  mTxt:    { fontSize: 14, fontWeight: '700', color: C.dim },
+  mTxtOn:  { color: C.text },
+  mSub:    { fontSize: 10, color: C.gold, fontWeight: '600', letterSpacing: 1 },
+  btnGold:    { width: '100%', maxWidth: 400, height: 50, backgroundColor: C.gold, borderRadius: 25, alignItems: 'center', justifyContent: 'center', marginBottom: 12, elevation: 6 },
+  btnGoldTxt: { fontSize: 15, fontWeight: '700', color: '#1a1200', letterSpacing: 1 },
+  btnOutline:    { height: 48, borderWidth: 1, borderColor: C.gold, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  btnOutlineTxt: { fontSize: 15, fontWeight: '600', color: C.gold },
+  divRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4, width: '100%', maxWidth: 400 },
+  divLine: { flex: 1, height: 1, backgroundColor: C.border },
+  divTxt:  { fontSize: 12, color: C.dim, letterSpacing: 2 },
+  err:     { color: '#c0392b', fontSize: 13, marginTop: 4 },
+
+  // Waiting
+  wLbl:  { fontSize: 12, letterSpacing: 3, color: C.dim, fontWeight: '700' },
+  wCode: { fontSize: 52, fontWeight: '900', color: C.gold, letterSpacing: 12 },
+  wHint: { fontSize: 12, color: C.dim },
+  slot:  { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(26,69,32,0.4)', borderWidth: 1, borderColor: C.border, borderRadius: 12, height: 50, paddingHorizontal: 16 },
+  slotOn:{ borderColor: C.gold },
+  av:    { width: 32, height: 32, borderRadius: 16, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center' },
+  avTxt: { fontWeight: '700', fontSize: 14, color: '#1a1200' },
+  pName: { fontWeight: '600', fontSize: 14, color: C.text, flex: 1 },
+  tBadge:{ fontSize: 10, color: C.gold, fontWeight: '700', letterSpacing: 1 },
+  spin:  { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: C.border, borderTopColor: C.gold },
+  wTxt:  { color: C.dim, fontSize: 13 },
+
+  // Game
+  game:   { flex: 1, backgroundColor: C.felt },
+  header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, backgroundColor: 'rgba(6,14,6,0.92)', borderBottomWidth: 1, borderBottomColor: C.border },
+  scoreBox: { flex: 1, alignItems: 'center' },
+  sLbl: { fontSize: 11, fontWeight: '800', color: C.gold, letterSpacing: 2 },
+  sVal: { fontSize: 28, fontWeight: '900', color: C.gold },
+  sMax: { fontSize: 13, color: C.dim },
+  sX:   { fontSize: 20, color: C.goldDim, paddingHorizontal: 10 },
+
+  middleRow: { flex: 1, flexDirection: 'row' },
+
+  // Toast
+  toast:    { position: 'absolute', bottom: 145, alignSelf: 'center', backgroundColor: 'rgba(10,28,12,0.97)', borderWidth: 1, borderColor: C.gold, borderRadius: 20, paddingVertical: 10, paddingHorizontal: 20, zIndex: 50, elevation: 20 },
+  toastTxt: { fontSize: 13, fontWeight: '600', color: C.text },
+
+  // Overlays
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.82)', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 },
+  ovCard:  { backgroundColor: C.felt, borderWidth: 1, borderColor: C.gold, borderRadius: 20, padding: 28, width: '100%', maxWidth: 340, alignItems: 'center', elevation: 20 },
+  ovTitle: { fontSize: 22, fontWeight: '900', color: C.gold, marginBottom: 6, textAlign: 'center' },
+  ovPts:   { fontSize: 14, color: C.dim, marginBottom: 16 },
+  ovScores:{ flexDirection: 'row', gap: 40, marginBottom: 16 },
+  ovTN:    { fontSize: 11, letterSpacing: 1.5, color: C.dim, marginBottom: 4 },
+  ovTV:    { fontSize: 42, fontWeight: '900', color: C.gold, lineHeight: 46 },
+  ovHint:  { fontSize: 12, color: C.dim, textAlign: 'center' },
+});
