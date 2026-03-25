@@ -8,14 +8,11 @@ import { io } from 'socket.io-client';
 import { DominoFace, C, HPAD, HGAP } from './domino';
 import { HandArea }                    from './hand';
 import { BoardArea, TopOpponent, SideOpponent } from './board';
-import { GameLogic } from './GameLogic'; // ← Nouvelle logique
+import { GameLogic } from './GameLogic';
 
 const SERVER_URL = 'https://domino-bloque.onrender.com';
 const { width }  = Dimensions.get('window');
 
-// ══════════════════════════════════════════════════════════════════════════════
-// APP
-// ══════════════════════════════════════════════════════════════════════════════
 export default function App() {
   const [screen,       setScreen]       = useState('lobby');
   const [playerName,   setPlayerName]   = useState('');
@@ -36,79 +33,274 @@ export default function App() {
   const [mancheResult, setMancheResult] = useState(null);
   const [gameOver,     setGameOver]     = useState(null);
   const [selectedIdx,  setSelectedIdx]  = useState(null);
-  const [boardSize,    setBoardSize]    = useState({ w: 800, h: 400 }); // ← Taille par défaut
+  const [boardSize,    setBoardSize]    = useState({ w: 800, h: 400 });
   const socketRef = useRef(null);
 
-  // ── Socket ────────────────────────────────────────────────────────────────
+  // ── Socket avec debug MAXIMUM ────────────────────────────────────────────
   useEffect(() => {
+    console.log('🔌 === INITIALISATION SOCKET ===');
+    console.log('🔌 SERVER_URL:', SERVER_URL);
+    console.log('🔌 Création socket...');
+    
     const socket = io(SERVER_URL, { transports: ['websocket'] });
     socketRef.current = socket;
+    
+    console.log('🔌 Socket créé:', socket ? 'OUI' : 'NON');
 
-    socket.on('room_created',  ({ code, player, players: pl }) => {
-      setMe(player); setPlayers(pl); setRoomCode(code); setScreen('waiting');
+    socket.on('connect', () => {
+      console.log('✅ === CONNEXION RÉUSSIE ===');
+      console.log('✅ Socket ID:', socket.id);
+      console.log('✅ Socket.connected:', socket.connected);
+      console.log('✅ Socket.readyState:', socket.readyState);
     });
-    socket.on('room_joined',   ({ code, player, players: pl, maxPlayers: mp }) => {
-      setMe(player); setPlayers(pl); setRoomCode(code);
+
+    socket.on('disconnect', (reason) => {
+      console.log('❌ === DÉCONNEXION ===');
+      console.log('❌ Raison:', reason);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.log('🚨 === ERREUR CONNEXION ===');
+      console.log('🚨 Error:', error);
+      console.log('🚨 Error.message:', error.message);
+      console.log('🚨 Error.type:', error.type);
+    });
+
+    socket.on('room_created', (data) => {
+      console.log('✅ === SALLE CRÉÉE REÇUE ===');
+      console.log('✅ Data complète:', data);
+      console.log('✅ Code:', data.code);
+      console.log('✅ Player:', data.player);
+      console.log('✅ Players count:', data.players?.length);
+      
+      setMe(data.player); 
+      setPlayers(data.players); 
+      setRoomCode(data.code); 
+      setScreen('waiting');
+      console.log('✅ State mis à jour, passage à waiting');
+    });
+
+    socket.on('room_joined', ({ code, player, players: pl, maxPlayers: mp }) => {
+      console.log('✅ === SALLE REJOINTE ===');
+      console.log('✅ Code:', code);
+      console.log('✅ Player:', player);
+      console.log('✅ Players:', pl);
+      
+      setMe(player); 
+      setPlayers(pl); 
+      setRoomCode(code);
       if (mp) setMaxPlayers(mp);
       setScreen('waiting');
     });
-    socket.on('player_joined', ({ players: pl }) => setPlayers(pl));
-    socket.on('manche_start',  ({ hand, currentTurn: ct, scores: sc, board: b, boardEnds: be, pioireLeft: pl }) => {
-      setMyHand(hand); setCurrentTurn(ct); setScores(sc);
-      setBoard(b || []); setBoardEnds(be);
+
+    socket.on('player_joined', ({ players: pl }) => {
+      console.log('👤 === JOUEUR REJOINT ===');
+      console.log('👤 Nouveaux players:', pl);
+      setPlayers(pl);
+    });
+
+    socket.on('manche_start', ({ hand, currentTurn: ct, scores: sc, board: b, boardEnds: be, pioireLeft: pl }) => {
+      console.log('🎮 === MANCHE DÉMARRÉE ===');
+      console.log('🎮 Hand size:', hand?.length);
+      console.log('🎮 Current turn:', ct);
+      console.log('🎮 Scores:', sc);
+      
+      setMyHand(hand); 
+      setCurrentTurn(ct); 
+      setScores(sc);
+      setBoard(b || []); 
+      setBoardEnds(be);
       setPioireLeft(pl || 0);
-      setSelectedIdx(null); setMancheResult(null); setGameOver(null);
+      setSelectedIdx(null); 
+      setMancheResult(null); 
+      setGameOver(null);
       setScreen('game');
+      
       if (ct === socket.id) showToast('🎯 Vous commencez !');
     });
-    socket.on('piece_played',  ({ playerId, board: b, boardEnds: be, handCounts: hc }) => {
-      console.log('📨 piece_played reçu:', { playerId, boardLength: b?.length, board: b });
-      setBoard(b); setBoardEnds(be); setHandCounts(hc);
+
+    socket.on('piece_played', ({ playerId, board: b, boardEnds: be, handCounts: hc }) => {
+      console.log('🎲 === PIÈCE JOUÉE ===');
+      console.log('🎲 Player ID:', playerId);
+      console.log('🎲 Board length:', b?.length);
+      
+      setBoard(b); 
+      setBoardEnds(be); 
+      setHandCounts(hc);
       if (playerId !== socket.id) showToast('Domino joué');
     });
-    socket.on('hand_update',   ({ hand }) => { setMyHand(hand); setSelectedIdx(null); });
-    socket.on('turn_change',   ({ currentTurn: ct, skipped, pioireLeft: pl }) => {
-      setCurrentTurn(ct); setSelectedIdx(null);
+
+    socket.on('hand_update', ({ hand }) => {
+      console.log('🎲 === MAIN MISE À JOUR ===');
+      console.log('🎲 Nouvelle taille:', hand?.length);
+      setMyHand(hand); 
+      setSelectedIdx(null);
+    });
+
+    socket.on('turn_change', ({ currentTurn: ct, skipped, pioireLeft: pl }) => {
+      console.log('🔄 === CHANGEMENT TOUR ===');
+      console.log('🔄 Nouveau tour:', ct);
+      console.log('🔄 Skipped:', skipped);
+      
+      setCurrentTurn(ct); 
+      setSelectedIdx(null);
       if (pl !== undefined) setPioireLeft(pl);
       if (skipped?.length > 0) showToast('Un joueur passe son tour');
     });
-    socket.on('forced_pass',   () => showToast('Vous passez votre tour'));
-    socket.on('piece_drawn',   ({ hand }) => { setMyHand(hand); showToast('Pièce piochée !'); });
-    socket.on('draw_happened', ({ handCounts: hc, pioireLeft: pl }) => {
-      setHandCounts(hc); setPioireLeft(pl);
-    });
-    socket.on('manche_end',    ({ winTeam, points, scores: sc }) => {
-      setScores(sc); setMancheResult({ winTeam, points, scores: sc });
-    });
-    socket.on('game_over',     ({ winTeam, scores: sc }) => {
-      setScores(sc); setGameOver({ winTeam, scores: sc });
-    });
-    socket.on('player_left',   ({ players: pl, msg }) => { setPlayers(pl); showToast(msg); });
-    socket.on('error',         ({ msg }) => setError(msg));
 
-    return () => socket.disconnect();
+    socket.on('forced_pass', () => {
+      console.log('⏭️ === PASSAGE FORCÉ ===');
+      showToast('Vous passez votre tour');
+    });
+
+    socket.on('piece_drawn', ({ hand }) => {
+      console.log('🎲 === PIÈCE PIOCHÉE ===');
+      console.log('🎲 Nouvelle main:', hand?.length);
+      setMyHand(hand); 
+      showToast('Pièce piochée !');
+    });
+
+    socket.on('draw_happened', ({ handCounts: hc, pioireLeft: pl }) => {
+      console.log('🎲 === PIOCHE ÉVÉNEMENT ===');
+      console.log('🎲 Pioche restante:', pl);
+      setHandCounts(hc); 
+      setPioireLeft(pl);
+    });
+
+    socket.on('manche_end', ({ winTeam, points, scores: sc }) => {
+      console.log('🏁 === FIN MANCHE ===');
+      console.log('🏁 Équipe gagnante:', winTeam);
+      console.log('🏁 Points:', points);
+      setScores(sc); 
+      setMancheResult({ winTeam, points, scores: sc });
+    });
+
+    socket.on('game_over', ({ winTeam, scores: sc }) => {
+      console.log('🏆 === FIN PARTIE ===');
+      console.log('🏆 Équipe gagnante:', winTeam);
+      setScores(sc); 
+      setGameOver({ winTeam, scores: sc });
+    });
+
+    socket.on('player_left', ({ players: pl, msg }) => {
+      console.log('👋 === JOUEUR PARTI ===');
+      console.log('👋 Message:', msg);
+      setPlayers(pl); 
+      showToast(msg);
+    });
+
+    socket.on('error', (data) => {
+      console.log('🚨 === ERREUR SERVEUR ===');
+      console.log('🚨 Data:', data);
+      console.log('🚨 Message:', data.msg);
+      setError(data.msg || 'Erreur serveur');
+    });
+
+    console.log('🔌 Tous les listeners configurés');
+
+    return () => {
+      console.log('🔌 === NETTOYAGE SOCKET ===');
+      socket.disconnect();
+    };
   }, []);
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Helpers avec debug ───────────────────────────────────────────────────
   function showToast(msg) {
+    console.log('📢 Toast affiché:', msg);
     setToast(msg);
     setTimeout(() => setToast(''), 2500);
   }
 
   function createRoom() {
-    if (!playerName.trim()) return setError('Entrez votre nom');
+    console.log('\n🎮 === DÉBUT createRoom ===');
+    console.log('📝 playerName raw:', `"${playerName}"`);
+    console.log('📝 playerName.length:', playerName.length);
+    console.log('📝 playerName.trim():', `"${playerName.trim()}"`);
+    console.log('📝 playerName.trim().length:', playerName.trim().length);
+    console.log('🎯 maxPlayers:', maxPlayers);
+    console.log('🎯 typeof maxPlayers:', typeof maxPlayers);
+    
+    console.log('🔗 socketRef.current existe:', socketRef.current ? 'OUI' : 'NON');
+    if (socketRef.current) {
+      console.log('🔗 socketRef.current.connected:', socketRef.current.connected);
+      console.log('🔗 socketRef.current.id:', socketRef.current.id);
+      console.log('🔗 socketRef.current.readyState:', socketRef.current.readyState);
+    }
+    
+    if (!playerName.trim()) {
+      console.log('❌ ÉCHEC: Nom vide');
+      setError('Entrez votre nom');
+      console.log('🎮 === FIN createRoom (échec nom) ===\n');
+      return;
+    }
+    
+    if (!socketRef.current) {
+      console.log('❌ ÉCHEC: Socket NULL');
+      setError('Socket non initialisé');
+      console.log('🎮 === FIN createRoom (échec socket null) ===\n');
+      return;
+    }
+    
+    if (!socketRef.current.connected) {
+      console.log('❌ ÉCHEC: Socket non connecté');
+      console.log('❌ État socket:', socketRef.current.readyState);
+      setError('Connexion en cours...');
+      console.log('🎮 === FIN createRoom (échec connexion) ===\n');
+      return;
+    }
+    
+    console.log('✅ TOUTES LES VALIDATIONS PASSÉES');
     setError('');
-    socketRef.current.emit('create_room', { name: playerName.trim(), maxPlayers });
+    
+    const data = { name: playerName.trim(), maxPlayers };
+    console.log('📦 Data à envoyer:', JSON.stringify(data));
+    
+    try {
+      console.log('📤 ENVOI create_room...');
+      socketRef.current.emit('create_room', data);
+      console.log('✅ create_room ENVOYÉ AVEC SUCCÈS');
+    } catch (error) {
+      console.log('🚨 ERREUR lors de l\'envoi:', error);
+      console.log('🚨 Error message:', error.message);
+      setError('Erreur envoi: ' + error.message);
+    }
+    
+    console.log('🎮 === FIN createRoom (succès) ===\n');
   }
 
   function joinRoom() {
-    if (!playerName.trim()) return setError('Entrez votre nom');
-    if (!joinCode.trim())   return setError('Entrez un code');
+    console.log('\n🎮 === DÉBUT joinRoom ===');
+    console.log('📝 playerName:', `"${playerName.trim()}"`);
+    console.log('📝 joinCode:', `"${joinCode.trim()}"`);
+    
+    if (!playerName.trim()) {
+      console.log('❌ ÉCHEC: Nom vide');
+      setError('Entrez votre nom');
+      console.log('🎮 === FIN joinRoom (échec nom) ===\n');
+      return;
+    }
+    if (!joinCode.trim()) {
+      console.log('❌ ÉCHEC: Code vide');
+      setError('Entrez un code');
+      console.log('🎮 === FIN joinRoom (échec code) ===\n');
+      return;
+    }
+    
+    if (!socketRef.current?.connected) {
+      console.log('❌ ÉCHEC: Socket non connecté');
+      setError('Connexion en cours...');
+      console.log('🎮 === FIN joinRoom (échec connexion) ===\n');
+      return;
+    }
+    
     setError('');
-    socketRef.current.emit('join_room', { name: playerName.trim(), code: joinCode.trim().toUpperCase() });
+    const data = { name: playerName.trim(), code: joinCode.trim().toUpperCase() };
+    console.log('📤 ENVOI join_room:', data);
+    socketRef.current.emit('join_room', data);
+    console.log('🎮 === FIN joinRoom (succès) ===\n');
   }
 
-  // ── Logique de jeu améliorée ─────────────────────────────────────────────
+  // ── Logique de jeu ───────────────────────────────────────────────────────
   function canPlay(piece) {
     return GameLogic.canPlaceDomino(board, piece, boardEnds);
   }
@@ -122,10 +314,21 @@ export default function App() {
   }
 
   function handleSelect(idx) {
-    console.log('🎯 handleSelect:', { idx, piece: myHand[idx], boardLength: board.length });
-    if (!isMyTurn) return showToast("Ce n'est pas votre tour");
+    console.log('🎯 === SÉLECTION DOMINO ===');
+    console.log('🎯 Index:', idx);
+    console.log('🎯 Pièce:', myHand[idx]);
+    console.log('🎯 isMyTurn:', isMyTurn);
+    
+    if (!isMyTurn) {
+      showToast("Ce n'est pas votre tour");
+      return;
+    }
+    
     const piece = myHand[idx];
-    if (!canPlay(piece)) return showToast('Pièce non jouable');
+    if (!canPlay(piece)) {
+      showToast('Pièce non jouable');
+      return;
+    }
 
     if (!boardEnds) {
       setSelectedIdx(selectedIdx === idx ? null : idx);
@@ -136,11 +339,13 @@ export default function App() {
     const right = canPlayRight(piece);
 
     if (left && !right) {
+      console.log('📤 Jeu automatique à gauche');
       socketRef.current.emit('play_piece', { code: roomCode, piece, side: 'left' });
       setSelectedIdx(null);
       return;
     }
     if (right && !left) {
+      console.log('📤 Jeu automatique à droite');
       socketRef.current.emit('play_piece', { code: roomCode, piece, side: 'right' });
       setSelectedIdx(null);
       return;
@@ -151,7 +356,9 @@ export default function App() {
 
   function playSide(side) {
     if (selectedIdx === null) return;
+    
     const piece = myHand[selectedIdx];
+    console.log('📤 Jeu manuel:', { piece, side });
     
     if (!boardEnds) {
       socketRef.current.emit('play_piece', { code: roomCode, piece, side: 'right' });
@@ -162,6 +369,7 @@ export default function App() {
   }
 
   function drawPiece() {
+    console.log('🎲 Pioche demandée');
     socketRef.current.emit('draw_piece', { code: roomCode });
   }
 
@@ -181,7 +389,7 @@ export default function App() {
   const showRight = isMyTurn && selPiece && board.length > 0 && canPlayRight(selPiece);
   const showCenter= isMyTurn && selPiece && board.length === 0;
 
-  // ── LOBBY (GARDÉ INTACT) ─────────────────────────────────────────────────
+  // ── LOBBY ─────────────────────────────────────────────────────────────────
   if (screen === 'lobby') return (
     <View style={S.bg}>
       <StatusBar hidden />
@@ -194,8 +402,15 @@ export default function App() {
           <Text style={S.t1}>DOMINO</Text>
           <Text style={S.t2}>BLOQUÉ</Text>
           <View style={S.connRow}>
-            <View style={S.connDot} />
-            <Text style={S.connTxt}>Connecté</Text>
+            <View style={[S.connDot, { 
+              backgroundColor: socketRef.current?.connected ? '#4caf50' : '#f44336' 
+            }]} />
+            <Text style={S.connTxt}>
+              {socketRef.current?.connected ? 
+                `Connecté (${socketRef.current.id?.slice(-4)})` : 
+                'Connexion...'
+              }
+            </Text>
           </View>
         </View>
 
@@ -204,7 +419,11 @@ export default function App() {
           <Text style={S.lbl}>VOTRE NOM</Text>
           <TextInput style={S.inp} placeholder="Entrez votre nom"
             placeholderTextColor="#4a6e4e" value={playerName}
-            onChangeText={setPlayerName} maxLength={16} />
+            onChangeText={(text) => {
+              console.log('📝 Changement nom:', `"${text}"`);
+              setPlayerName(text);
+            }} 
+            maxLength={16} />
         </View>
 
         {/* Mode */}
@@ -214,7 +433,10 @@ export default function App() {
             {[2, 4].map(n => (
               <TouchableOpacity key={n}
                 style={[S.mBtn, maxPlayers === n && S.mBtnOn]}
-                onPress={() => setMaxPlayers(n)}>
+                onPress={() => {
+                  console.log('🎯 Changement maxPlayers:', n);
+                  setMaxPlayers(n);
+                }}>
                 <Text style={[S.mTxt, maxPlayers === n && S.mTxtOn]}>{n} Joueurs</Text>
                 {n === 4 && <Text style={S.mSub}>Équipes</Text>}
               </TouchableOpacity>
@@ -222,8 +444,21 @@ export default function App() {
           </View>
         </View>
 
-        <TouchableOpacity style={S.btnGold} onPress={createRoom}>
-          <Text style={S.btnGoldTxt}>Créer une salle privée</Text>
+        <TouchableOpacity 
+          style={[S.btnGold, !socketRef.current?.connected && S.btnDisabled]} 
+          onPress={() => {
+            console.log('\n🎯 === CLIC BOUTON CRÉER SALLE ===');
+            console.log('🎯 Au moment du clic:');
+            console.log('🎯 - Socket connecté:', socketRef.current?.connected);
+            console.log('🎯 - PlayerName:', `"${playerName}"`);
+            console.log('🎯 - MaxPlayers:', maxPlayers);
+            createRoom();
+          }}
+          disabled={!socketRef.current?.connected}
+        >
+          <Text style={S.btnGoldTxt}>
+            {socketRef.current?.connected ? 'Créer une salle privée' : 'Connexion...'}
+          </Text>
         </TouchableOpacity>
 
         <View style={S.divRow}>
@@ -234,19 +469,54 @@ export default function App() {
           <Text style={S.lbl}>CODE DE LA SALLE</Text>
           <TextInput style={S.inp} placeholder="Ex: ABC123"
             placeholderTextColor="#4a6e4e" value={joinCode}
-            onChangeText={t => setJoinCode(t.toUpperCase())}
+            onChangeText={t => {
+              console.log('📝 Changement code:', `"${t}"`);
+              setJoinCode(t.toUpperCase());
+            }}
             maxLength={6} autoCapitalize="characters" />
-          <TouchableOpacity style={[S.btnOutline, { marginTop: 12 }]} onPress={joinRoom}>
-            <Text style={S.btnOutlineTxt}>Rejoindre</Text>
+          <TouchableOpacity 
+            style={[S.btnOutline, { marginTop: 12 }, !socketRef.current?.connected && S.btnDisabled]} 
+            onPress={() => {
+              console.log('\n🎯 === CLIC BOUTON REJOINDRE ===');
+              joinRoom();
+            }}
+            disabled={!socketRef.current?.connected}
+          >
+            <Text style={S.btnOutlineTxt}>
+              {socketRef.current?.connected ? 'Rejoindre' : 'Connexion...'}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {!!error && <Text style={S.err}>{error}</Text>}
+        {!!error && (
+          <View style={S.errorBox}>
+            <Text style={S.err}>❌ {error}</Text>
+          </View>
+        )}
+        
+        {/* Debug info */}
+        {__DEV__ && (
+          <View style={S.debugCard}>
+            <Text style={S.debugTitle}>🔧 DEBUG INFO</Text>
+            <Text style={S.debugText}>
+              Socket: {socketRef.current?.connected ? '✅ Connecté' : '❌ Déconnecté'}
+            </Text>
+            <Text style={S.debugText}>
+              ID: {socketRef.current?.id || 'Aucun'}
+            </Text>
+            <Text style={S.debugText}>
+              Server: {SERVER_URL}
+            </Text>
+            <Text style={S.debugText}>
+              Nom: "{playerName}" (longueur: {playerName.length})
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
 
-  // ── WAITING (GARDÉ INTACT) ───────────────────────────────────────────────
+  // ── WAITING ───────────────────────────────────────────────────────────────
   if (screen === 'waiting') return (
     <View style={[S.bg, { alignItems: 'center', justifyContent: 'center', gap: 14, padding: 20 }]}>
       <StatusBar hidden />
@@ -273,7 +543,7 @@ export default function App() {
     </View>
   );
 
-  // ── GAME (Amélioré avec nouvelle logique) ────────────────────────────────
+  // ── GAME ──────────────────────────────────────────────────────────────────
   return (
     <View style={S.game}>
       <StatusBar hidden />
@@ -304,8 +574,6 @@ export default function App() {
 
       {/* MILIEU */}
       <View style={S.middleRow}>
-
-        {/* GAUCHE */}
         <SideOpponent
           player={leftPlayer}
           handCount={handCounts[leftPlayer?.id]}
@@ -313,7 +581,6 @@ export default function App() {
           side="left"
         />
 
-        {/* PLATEAU AMÉLIORÉ */}
         <BoardArea
           board={board}
           boardSize={boardSize}
@@ -333,7 +600,6 @@ export default function App() {
           }}
         />
 
-        {/* DROITE */}
         <SideOpponent
           player={rightPlayer}
           handCount={handCounts[rightPlayer?.id]}
@@ -397,87 +663,4 @@ export default function App() {
               {gameOver.winTeam === me?.team ? 'Félicitations !' : "L'équipe adverse a gagné"}
             </Text>
             <View style={S.ovScores}>
-              {[0, 1].map(t => (
-                <View key={t} style={{ alignItems: 'center' }}>
-                  <Text style={S.ovTN}>{teamName(t)}</Text>
-                  <Text style={S.ovTV}>{gameOver.scores[t]}</Text>
-                </View>
-              ))}
-            </View>
-            <TouchableOpacity style={[S.btnGold, { marginTop: 16, width: '100%' }]}
-              onPress={() => setScreen('lobby')}>
-              <Text style={S.btnGoldTxt}>Nouvelle partie</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-}
-
-// ── STYLES (GARDÉS INTACTS) ──────────────────────────────────────────────────
-const S = StyleSheet.create({
-  // Lobby
-  bg:          { flex: 1, backgroundColor: C.bg },
-  lobbyScroll: { padding: 20, paddingBottom: 40, alignItems: 'center' },
-  logoWrap:    { alignItems: 'center', marginBottom: 20, marginTop: 16 },
-  t1: { fontSize: 44, fontWeight: '900', color: '#fff', letterSpacing: 4 },
-  t2: { fontSize: 20, fontWeight: '700', color: C.gold, letterSpacing: 10, marginTop: 2 },
-  connRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  connDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4caf50' },
-  connTxt: { fontSize: 12, color: C.dim },
-  card:    { width: '100%', maxWidth: 400, backgroundColor: 'rgba(26,69,32,0.5)', borderWidth: 1, borderColor: C.border, borderRadius: 16, padding: 16, marginBottom: 12 },
-  lbl:     { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: C.dim, marginBottom: 8, textTransform: 'uppercase' },
-  inp:     { height: 48, backgroundColor: 'rgba(15,40,18,0.8)', borderWidth: 1, borderColor: C.border, borderRadius: 10, color: C.text, fontSize: 15, paddingHorizontal: 16 },
-  mBtn:    { flex: 1, height: 58, backgroundColor: 'rgba(15,40,18,0.6)', borderWidth: 2, borderColor: C.border, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  mBtnOn:  { borderColor: C.gold, backgroundColor: 'rgba(201,168,76,0.15)' },
-  mTxt:    { fontSize: 14, fontWeight: '700', color: C.dim },
-  mTxtOn:  { color: C.text },
-  mSub:    { fontSize: 10, color: C.gold, fontWeight: '600', letterSpacing: 1 },
-  btnGold:    { width: '100%', maxWidth: 400, height: 50, backgroundColor: C.gold, borderRadius: 25, alignItems: 'center', justifyContent: 'center', marginBottom: 12, elevation: 6 },
-  btnGoldTxt: { fontSize: 15, fontWeight: '700', color: '#1a1200', letterSpacing: 1 },
-  btnOutline:    { height: 48, borderWidth: 1, borderColor: C.gold, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  btnOutlineTxt: { fontSize: 15, fontWeight: '600', color: C.gold },
-  divRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4, width: '100%', maxWidth: 400 },
-  divLine: { flex: 1, height: 1, backgroundColor: C.border },
-  divTxt:  { fontSize: 12, color: C.dim, letterSpacing: 2 },
-  err:     { color: '#c0392b', fontSize: 13, marginTop: 4 },
-
-  // Waiting
-  wLbl:  { fontSize: 12, letterSpacing: 3, color: C.dim, fontWeight: '700' },
-  wCode: { fontSize: 52, fontWeight: '900', color: C.gold, letterSpacing: 12 },
-  wHint: { fontSize: 12, color: C.dim },
-  slot:  { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(26,69,32,0.4)', borderWidth: 1, borderColor: C.border, borderRadius: 12, height: 50, paddingHorizontal: 16 },
-  slotOn:{ borderColor: C.gold },
-  av:    { width: 32, height: 32, borderRadius: 16, backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center' },
-  avTxt: { fontWeight: '700', fontSize: 14, color: '#1a1200' },
-  pName: { fontWeight: '600', fontSize: 14, color: C.text, flex: 1 },
-  tBadge:{ fontSize: 10, color: C.gold, fontWeight: '700', letterSpacing: 1 },
-  spin:  { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: C.border, borderTopColor: C.gold },
-  wTxt:  { color: C.dim, fontSize: 13 },
-
-  // Game
-  game:   { flex: 1, backgroundColor: C.felt },
-  header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, backgroundColor: 'rgba(6,14,6,0.92)', borderBottomWidth: 1, borderBottomColor: C.border },
-  scoreBox: { flex: 1, alignItems: 'center' },
-  sLbl: { fontSize: 11, fontWeight: '800', color: C.gold, letterSpacing: 2 },
-  sVal: { fontSize: 28, fontWeight: '900', color: C.gold },
-  sMax: { fontSize: 13, color: C.dim },
-  sX:   { fontSize: 20, color: C.goldDim, paddingHorizontal: 10 },
-
-  middleRow: { flex: 1, flexDirection: 'row' },
-
-  // Toast
-  toast:    { position: 'absolute', bottom: 145, alignSelf: 'center', backgroundColor: 'rgba(10,28,12,0.97)', borderWidth: 1, borderColor: C.gold, borderRadius: 20, paddingVertical: 10, paddingHorizontal: 20, zIndex: 50, elevation: 20 },
-  toastTxt: { fontSize: 13, fontWeight: '600', color: C.text },
-
-  // Overlays
-  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.82)', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 },
-  ovCard:  { backgroundColor: C.felt, borderWidth: 1, borderColor: C.gold, borderRadius: 20, padding: 28, width: '100%', maxWidth: 340, alignItems: 'center', elevation: 20 },
-  ovTitle: { fontSize: 22, fontWeight: '900', color: C.gold, marginBottom: 6, textAlign: 'center' },
-  ovPts:   { fontSize: 14, color: C.dim, marginBottom: 16 },
-  ovScores:{ flexDirection: 'row', gap: 40, marginBottom: 16 },
-  ovTN:    { fontSize: 11, letterSpacing: 1.5, color: C.dim, marginBottom: 4 },
-  ovTV:    { fontSize: 42, fontWeight: '900', color: C.gold, lineHeight: 46 },
-  ovHint:  { fontSize: 12, color: C.dim, textAlign: 'center' },
-});
+              {[0,
