@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, StatusBar, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, StatusBar, ScrollView, Platform } from 'react-native';
 import { io } from 'socket.io-client';
 import { DominoFace, C, HPAD, HGAP } from './domino';
 import { HandArea } from './hand';
@@ -33,21 +33,41 @@ export default function App() {
   const socketRef = useRef(null);
 
   useEffect(() => {
-    console.log('🔌 INITIALISATION SOCKET');
-    const socket = io(SERVER_URL, { transports: ['websocket'] });
+    console.log('🔌 DÉBUT CONNEXION');
+    console.log('🔌 Vers:', SERVER_URL);
+    
+    const socket = io(SERVER_URL, {
+      transports: ['polling', 'websocket'],
+      upgrade: true,
+      timeout: 20000,
+      forceNew: true,
+      autoConnect: true
+    });
+    
     socketRef.current = socket;
+    socket.connect();
+    console.log('🔌 Connexion forcée');
 
     socket.on('connect', () => {
-      console.log('✅ CONNEXION RÉUSSIE - ID:', socket.id);
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.log('❌ DÉCONNEXION:', reason);
+      console.log('✅ CONNECTÉ !');
+      console.log('✅ ID:', socket.id);
     });
 
     socket.on('connect_error', (error) => {
-      console.log('🚨 ERREUR CONNEXION:', error.message);
+      console.log('🚨 ERREUR:', error.message);
+      setTimeout(() => {
+        console.log('🔄 Retry...');
+        socket.connect();
+      }, 2000);
     });
+
+    socket.on('disconnect', (reason) => {
+      console.log('❌ Déco:', reason);
+    });
+
+    const interval = setInterval(() => {
+      console.log('🔍', socket.connected ? 'CONNECTÉ' : 'DÉCONNECTÉ');
+    }, 2000);
 
     socket.on('room_created', (data) => {
       console.log('✅ SALLE CRÉÉE:', data);
@@ -99,7 +119,7 @@ export default function App() {
       setCurrentTurn(ct);
       setSelectedIdx(null);
       if (pl !== undefined) setPioireLeft(pl);
-      if (skipped?.length > 0) showToast('Un joueur passe son tour');
+      if (skipped?.length > 0) showToast('Un joueur passe');
     });
 
     socket.on('forced_pass', () => {
@@ -136,7 +156,11 @@ export default function App() {
       setError(data.msg || 'Erreur serveur');
     });
 
-    return () => socket.disconnect();
+    return () => {
+      console.log('🔌 Nettoyage');
+      clearInterval(interval);
+      socket.disconnect();
+    };
   }, []);
 
   function showToast(msg) {
@@ -302,7 +326,7 @@ export default function App() {
         <TouchableOpacity 
           style={[S.btnGold, !socketRef.current?.connected && S.btnDisabled]} 
           onPress={() => {
-            console.log('🎯 CLIC CRÉER - Socket:', socketRef.current?.connected, 'Nom:', playerName);
+            console.log('🎯 CLIC CRÉER');
             createRoom();
           }}
           disabled={!socketRef.current?.connected}
@@ -351,7 +375,7 @@ export default function App() {
             <Text style={S.debugTitle}>🔧 DEBUG</Text>
             <Text style={S.debugText}>Socket: {socketRef.current?.connected ? '✅' : '❌'}</Text>
             <Text style={S.debugText}>ID: {socketRef.current?.id || 'Aucun'}</Text>
-            <Text style={S.debugText}>Nom: "{playerName}" ({playerName.length})</Text>
+            <Text style={S.debugText}>Nom: "{playerName}"</Text>
           </View>
         )}
       </ScrollView>
@@ -479,7 +503,7 @@ export default function App() {
         <View style={S.overlay}>
           <View style={S.ovCard}>
             <Text style={S.ovTitle}>
-              {mancheResult.winTeam === me?.team ? '🎉 Votre équipe gagne !'
+              {mancheResult.winTeam === me?.team ? '🎉 Équipe gagne !'
                 : mancheResult.winTeam === -1 ? 'Égalité !'
                 : '😔 Équipe adverse gagne'}
             </Text>
