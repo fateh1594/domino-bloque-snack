@@ -51,13 +51,13 @@ function dealCards(room) {
   room.layout = null;
 }
 
-// ─── Calcul position/rotation domino sur plateau CORRIGÉ ──────────────────────
-const DOMINO_W = 60;
-const DOMINO_H = 30;
-const SPACING = 2;
-const BOARD_W = 800;
-const BOARD_H = 500;
-const MARGIN = 40;
+// ─── Calcul position/rotation domino sur plateau ✅ CORRIGÉ ───────────────────
+const DOMINO_W = 80;
+const DOMINO_H = 40;
+const SPACING = 3;
+const BOARD_W = 1000;
+const BOARD_H = 600;
+const MARGIN = 50;
 
 function initLayout() {
   const centerX = Math.floor((BOARD_W - DOMINO_W) / 2);
@@ -66,6 +66,7 @@ function initLayout() {
   return {
     firstX: centerX,
     firstY: centerY,
+    firstUsed: false,
     nextRightX: centerX + DOMINO_W + SPACING,
     nextRightY: centerY,
     nextLeftX: centerX - DOMINO_W - SPACING,
@@ -82,10 +83,11 @@ function initLayout() {
 function getNextPosition(layout, side, isDouble = false) {
   let x, y, rotation = 0;
   
-  if (side === 'center') {
+  if (side === 'center' || (!layout.firstUsed && side === 'right')) {
     x = layout.firstX;
     y = layout.firstY;
     rotation = isDouble ? 90 : 0;
+    layout.firstUsed = true;
     return { x, y, rotation };
   }
   
@@ -109,11 +111,6 @@ function getNextPosition(layout, side, isDouble = false) {
       case 'down':
         rotation = 90;
         layout.nextRightY = y + DOMINO_W + SPACING;
-        if (layout.nextRightY > layout.bottomBoundary) {
-          layout.rightDirection = 'left';
-          layout.nextRightX = x - DOMINO_W - SPACING;
-          layout.nextRightY = y;
-        }
         break;
         
       case 'left':
@@ -121,7 +118,7 @@ function getNextPosition(layout, side, isDouble = false) {
         layout.nextRightX = x - DOMINO_W - SPACING;
         break;
     }
-  } else {
+  } else if (side === 'left') {
     x = layout.nextLeftX;
     y = layout.nextLeftY;
     
@@ -243,6 +240,7 @@ function nextTurn(room) {
 
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
+  console.log(`✅ Joueur connecté: ${socket.id}`);
 
   socket.on('create_room', ({ name, maxPlayers }) => {
     const code = generateCode();
@@ -257,6 +255,7 @@ io.on('connection', (socket) => {
     rooms[code].players.push(player);
     socket.join(code);
     socket.roomCode = code;
+    console.log(`🎮 Salle créée: ${code} par ${name}`);
     socket.emit('room_created', { code, player, players: rooms[code].players });
   });
 
@@ -273,11 +272,14 @@ io.on('connection', (socket) => {
     socket.join(code.toUpperCase());
     socket.roomCode = code.toUpperCase();
 
+    console.log(`👤 ${name} a rejoint la salle ${code}`);
     io.to(code.toUpperCase()).emit('player_joined', { players: room.players });
     socket.emit('room_joined', { code: code.toUpperCase(), player, players: room.players, maxPlayers: room.maxPlayers });
 
-    if (room.players.length === room.maxPlayers)
+    if (room.players.length === room.maxPlayers) {
+      console.log(`🚀 Démarrage de la partie dans ${code}`);
       setTimeout(() => startManche(room), 1000);
+    }
   });
 
   socket.on('board_size', ({ code, width, height }) => {
@@ -300,7 +302,6 @@ io.on('connection', (socket) => {
     if (pieceIdx === -1) return;
 
     let played = [...hand[pieceIdx]];
-
     if (!room.layout) room.layout = initLayout();
 
     if (!room.boardEnds) {
@@ -370,6 +371,7 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ✅ PIOCHE CORRIGÉE
   socket.on('draw_piece', ({ code }) => {
     const room = rooms[code];
     if (!room || room.currentTurn !== socket.id) return;
@@ -378,6 +380,8 @@ io.on('connection', (socket) => {
     const piece = room.pioche.pop();
     room.hands[socket.id].push(piece);
 
+    console.log(`🎲 ${socket.id} a pioché: [${piece[0]}, ${piece[1]}]`);
+
     socket.emit('piece_drawn', { piece, hand: room.hands[socket.id] });
     io.to(code).emit('draw_happened', {
       playerId: socket.id,
@@ -385,26 +389,35 @@ io.on('connection', (socket) => {
       pioireLeft: room.pioche.length,
     });
 
+    // ✅ Vérifier si le joueur peut maintenant jouer
     const canNowPlay = canPlay(room.hands[socket.id], room.boardEnds);
     if (canNowPlay) {
+      console.log(`✅ ${socket.id} peut maintenant jouer`);
       io.to(code).emit('turn_change', { currentTurn: room.currentTurn, skipped: [], pioireLeft: room.pioche.length });
     } else if (room.pioche.length === 0) {
+      console.log(`⏭️ ${socket.id} passe son tour (pioche vide)`);
       nextTurn(room);
       io.to(code).emit('turn_change', { currentTurn: room.currentTurn, skipped: [socket.id], pioireLeft: 0 });
     }
+    // ✅ Si pioche pas vide et ne peut pas jouer, le joueur reste en attente
   });
 
   socket.on('disconnect', () => {
+    console.log(`❌ Joueur déconnecté: ${socket.id}`);
     const code = socket.roomCode;
     if (!code || !rooms[code]) return;
     const room = rooms[code];
     room.players = room.players.filter(p => p.id !== socket.id);
-    if (room.players.length === 0) delete rooms[code];
-    else io.to(code).emit('player_left', { players: room.players, msg: 'Un joueur a quitté la partie' });
+    if (room.players.length === 0) {
+      console.log(`🗑️ Suppression de la salle vide: ${code}`);
+      delete rooms[code];
+    } else {
+      io.to(code).emit('player_left', { players: room.players, msg: 'Un joueur a quitté la partie' });
+    }
   });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🎮 Domino Bloqué - Serveur v24 sur port ${PORT}\n`);
+  console.log(`\n🎮 Domino Bloqué - Serveur FINAL sur port ${PORT}\n`);
 });
