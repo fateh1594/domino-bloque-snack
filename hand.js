@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { DominoFace, C, HDW, HDH, HPAD, HGAP } from './domino';
+import { GameLogic } from './utils/GameLogic'; // ← Nouvelle logique
 
 export function HiddenDomino({ w, h }) {
   return (
@@ -17,12 +18,18 @@ export function HandArea({
 }) {
   const currentPlayer = players.find(p => p.id === currentTurn);
   
+  // Calculer les statistiques de la main
+  const handScore = GameLogic.calculateHandScore(myHand);
+  const playableCount = myHand.filter(piece => canPlay(piece)).length;
+  
   console.log('🎲 Hand render:', {
     isMyTurn,
     needToDraw,
     pioireLeft,
     selectedIdx,
-    handLength: myHand?.length || 0
+    handLength: myHand?.length || 0,
+    playableCount,
+    handScore
   });
 
   return (
@@ -37,13 +44,17 @@ export function HandArea({
           <Text style={S.myName}>{me?.name || 'Joueur'}</Text>
           <Text style={S.turnInfo}>
             {isMyTurn ? (
-              needToDraw ? '🎲 Piochez une carte' : '🎯 À vous de jouer'
+              needToDraw ? '🎲 Piochez une carte' : `🎯 À vous (${playableCount} jouables)`
             ) : (
               `Tour de ${currentPlayer?.name || 'adversaire'}`
             )}
           </Text>
+          <Text style={S.handStats}>
+            {myHand.length} domino{myHand.length > 1 ? 's' : ''} • {handScore} points
+          </Text>
         </View>
 
+        {/* Bouton piocher amélioré */}
         {needToDraw && pioireLeft > 0 && (
           <TouchableOpacity 
             style={S.drawBtn} 
@@ -58,6 +69,7 @@ export function HandArea({
           </TouchableOpacity>
         )}
 
+        {/* Bouton annuler amélioré */}
         {selectedIdx !== null && (
           <TouchableOpacity style={S.cancelBtn} onPress={onCancelSelect}>
             <Text style={S.cancelText}>✕</Text>
@@ -65,10 +77,12 @@ export function HandArea({
         )}
       </View>
 
+      {/* Main du joueur avec indicateurs améliorés */}
       <View style={S.handRow}>
         {myHand.map((piece, idx) => {
           const isSelected = selectedIdx === idx;
           const isPlayable = canPlay(piece);
+          const isDouble = piece[0] === piece[1];
           
           return (
             <TouchableOpacity
@@ -97,13 +111,57 @@ export function HandArea({
                 }}
               />
               
-              {isSelected && (
-                <View style={S.selectedGlow} />
+              {/* Glow de sélection */}
+              {isSelected && <View style={S.selectedGlow} />}
+              
+              {/* Indicateurs visuels améliorés */}
+              {isMyTurn && (
+                <>
+                  {/* Indicateur de jouabilité */}
+                  <View style={[
+                    S.playIndicator,
+                    { backgroundColor: isPlayable ? C.green : '#666' }
+                  ]} />
+                  
+                  {/* Badge pour les doubles */}
+                  {isDouble && (
+                    <View style={S.doubleBadge}>
+                      <Text style={S.doubleBadgeText}>×2</Text>
+                    </View>
+                  )}
+                  
+                  {/* Valeur totale du domino */}
+                  <View style={S.valueBadge}>
+                    <Text style={S.valueBadgeText}>{piece[0] + piece[1]}</Text>
+                  </View>
+                </>
               )}
             </TouchableOpacity>
           );
         })}
       </View>
+
+      {/* Aide contextuelle */}
+      {isMyTurn && (
+        <View style={S.helpRow}>
+          {selectedIdx !== null ? (
+            <Text style={S.helpText}>
+              {myHand[selectedIdx][0] === myHand[selectedIdx][1] 
+                ? '🔄 Double - Se place perpendiculairement'
+                : '◀️ ▶️ Choisissez le côté pour placer ce domino'
+              }
+            </Text>
+          ) : playableCount === 0 ? (
+            <Text style={S.helpTextError}>
+              ❌ Aucun domino jouable - {pioireLeft > 0 ? 'Piochez' : 'Passez votre tour'}
+            </Text>
+          ) : (
+            <Text style={S.helpText}>
+              ✨ {playableCount} domino{playableCount > 1 ? 's' : ''} jouable{playableCount > 1 ? 's' : ''} - Sélectionnez pour jouer
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -171,6 +229,13 @@ const S = StyleSheet.create({
     fontSize: 12,
     color: C.dim,
     fontWeight: '600',
+  },
+
+  handStats: {
+    fontSize: 10,
+    color: C.goldDim,
+    fontWeight: '600',
+    marginTop: 2,
   },
 
   drawBtn: {
@@ -247,6 +312,67 @@ const S = StyleSheet.create({
     borderWidth: 2,
     borderColor: C.gold,
     backgroundColor: 'rgba(201,168,76,0.1)',
+  },
+
+  // Nouveaux indicateurs visuels
+  playIndicator: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+
+  doubleBadge: {
+    position: 'absolute',
+    top: -6,
+    left: -6,
+    backgroundColor: C.gold,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+
+  doubleBadgeText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#1a1200',
+  },
+
+  valueBadge: {
+    position: 'absolute',
+    bottom: -6,
+    right: -6,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 6,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+  },
+
+  valueBadgeText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: C.gold,
+  },
+
+  helpRow: {
+    paddingTop: 8,
+    paddingHorizontal: 4,
+  },
+
+  helpText: {
+    fontSize: 11,
+    color: C.dim,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+
+  helpTextError: {
+    fontSize: 11,
+    color: C.red,
+    textAlign: 'center',
+    fontWeight: '600',
   },
 
   hiddenDomino: {
