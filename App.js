@@ -7,7 +7,7 @@ import { BoardArea, TopOpponent, SideOpponent } from './board';
 import { GameLogic } from './GameLogic';
 
 
-const SERVER_URL = 'https://domino-bloque-server.onrender.com';
+const SERVER_URL = 'https://domino-bloque.onrender.com';
 const { width } = Dimensions.get('window');
 
 export default function App() {
