@@ -3,55 +3,24 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { DominoFace, C } from './domino';
 import { HiddenDomino } from './hand';
 
-// ── Constantes CORRIGÉES ─────────────────────────────────────────────────────
-const BOARD_W = 800;
-const BOARD_H = 500;
-const DOMINO_W = 80;
-const DOMINO_H = 40;
-
-// ── Plateau corrigé ──────────────────────────────────────────────────────────
 export function BoardArea({
   board, boardSize, boardEnds,
   isMyTurn, selPiece,
   showLeft, showRight, showCenter,
   onPlaySide, onLayout,
 }) {
-  console.log('🎲 Board render:', {
-    boardLength: board?.length || 0,
-    boardSize,
-    board: board?.slice(0, 3) || []
-  });
-
-  const scale = Math.min(
-    (boardSize.w || 400) / BOARD_W,
-    (boardSize.h || 300) / BOARD_H
-  );
-  const finalScale = Math.max(0.5, Math.min(1.2, scale));
-
-  const offsetX = Math.max(0, ((boardSize.w || 400) - BOARD_W * finalScale) / 2);
-  const offsetY = Math.max(0, ((boardSize.h || 300) - BOARD_H * finalScale) / 2);
+  console.log('🎲 Board:', { boardLength: board?.length, boardSize });
 
   const isEmpty = !board || board.length === 0;
 
-  console.log('📐 Scale info:', { scale, finalScale, offsetX, offsetY });
-
   return (
     <View style={S.boardArea} onLayout={onLayout}>
-      {/* Texture de fond */}
-      <View style={S.feltPattern} pointerEvents="none">
-        {[...Array(8)].map((_, i) => (
-          <View key={`line-${i}`} style={[S.feltLine, { top: `${i * 12.5}%` }]} />
-        ))}
-      </View>
-
-      {/* DEBUG - Afficher info plateau */}
       <View style={S.debugInfo} pointerEvents="none">
         <Text style={S.debugText}>
-          Dominos: {board?.length || 0} | Scale: {finalScale.toFixed(2)}
+          Dominos: {board?.length || 0} | Taille: {boardSize.w?.toFixed(0)}×{boardSize.h?.toFixed(0)}
         </Text>
       </View>
 
-      {/* Plateau vide */}
       {isEmpty && (
         <View style={S.emptyBoard}>
           <View style={S.emptyIcon}>
@@ -62,39 +31,34 @@ export function BoardArea({
         </View>
       )}
 
-      {/* DOMINOS SUR LE PLATEAU - VERSION CORRIGÉE */}
       {board && board.map((tile, i) => {
         const isVertical = tile.rotation === 90;
-        
-        const baseW = isVertical ? DOMINO_H : DOMINO_W;
-        const baseH = isVertical ? DOMINO_W : DOMINO_H;
-        const dominoWidth = Math.max(40, baseW * finalScale);
-        const dominoHeight = Math.max(20, baseH * finalScale);
-        
-        const posX = (tile.x || 0) * finalScale + offsetX;
-        const posY = (tile.y || 0) * finalScale + offsetY;
-        
+        const dominoWidth = isVertical ? 50 : 100;
+        const dominoHeight = isVertical ? 100 : 50;
+        const centerX = (boardSize.w || 400) / 2;
+        const centerY = (boardSize.h || 300) / 2;
+        const offsetX = (i - Math.floor(board.length / 2)) * (dominoWidth + 10);
+        const posX = centerX + offsetX - dominoWidth / 2;
+        const posY = centerY - dominoHeight / 2;
         const valueA = tile.piece?.[0] ?? tile.a ?? 0;
         const valueB = tile.piece?.[1] ?? tile.b ?? 0;
 
         console.log(`🎲 Domino ${i}:`, {
           values: [valueA, valueB],
           position: { x: posX.toFixed(1), y: posY.toFixed(1) },
-          size: { w: dominoWidth.toFixed(1), h: dominoHeight.toFixed(1) },
-          rotation: tile.rotation,
-          isVertical
+          size: { w: dominoWidth, h: dominoHeight }
         });
 
         return (
           <View 
-            key={`board-domino-${i}-${valueA}-${valueB}`} 
+            key={`domino-${i}-${valueA}-${valueB}-${Date.now()}`}
             style={{
               position: 'absolute',
               left: posX,
               top: posY,
-              zIndex: 20 + i,
-              borderWidth: 1,
-              borderColor: '#ff0000',
+              zIndex: 30 + i,
+              borderWidth: 2,
+              borderColor: '#ffff00',
             }}
           >
             <DominoFace
@@ -104,21 +68,20 @@ export function BoardArea({
               h={dominoHeight}
               vertical={isVertical}
               borderColor="#000"
-              borderWidth={2}
+              borderWidth={3}
               extraStyle={{
-                backgroundColor: '#fff',
-                elevation: 20 + i,
+                backgroundColor: '#ffffff',
+                elevation: 30 + i,
                 shadowColor: '#000',
-                shadowOffset: { width: 2, height: 2 },
-                shadowOpacity: 0.8,
-                shadowRadius: 4,
+                shadowOffset: { width: 3, height: 3 },
+                shadowOpacity: 1,
+                shadowRadius: 5,
               }}
             />
           </View>
         );
       })}
 
-      {/* Zone de placement central */}
       {showCenter && (
         <TouchableOpacity 
           style={S.centerZone} 
@@ -132,7 +95,6 @@ export function BoardArea({
         </TouchableOpacity>
       )}
 
-      {/* Zones latérales */}
       {(showLeft || showRight) && (
         <>
           {showLeft && (
@@ -220,136 +182,123 @@ const S = StyleSheet.create({
   boardArea: {
     flex: 1,
     position: 'relative',
-    backgroundColor: '#2d5016',
+    backgroundColor: '#1e4d1e',
     margin: 4,
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#4a8020',
-  },
-  
-  feltPattern: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    opacity: 0.1,
-  },
-  
-  feltLine: {
-    position: 'absolute',
-    left: 0, right: 0,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 3,
+    borderColor: '#ffaa00',
   },
 
   debugInfo: {
     position: 'absolute',
-    top: 5,
-    left: 5,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 4,
-    borderRadius: 4,
-    zIndex: 100,
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    padding: 6,
+    borderRadius: 6,
+    zIndex: 200,
   },
   
   debugText: {
     color: '#fff',
-    fontSize: 10,
-    fontFamily: 'monospace',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
 
   emptyBoard: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 15,
   },
   
   emptyIcon: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: 'rgba(201,168,76,0.2)',
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: C.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 15,
   },
   
-  emptyIconTxt: { fontSize: 32 },
+  emptyIconTxt: { fontSize: 36 },
   
   emptyTxt: {
     color: C.gold,
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '800',
   },
   
   emptyHint: {
-    color: C.dim,
-    fontSize: 13,
+    color: '#aaa',
+    fontSize: 14,
   },
 
   centerZone: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(201,168,76,0.15)',
+    backgroundColor: 'rgba(255,255,0,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 5,
   },
   
   centerZoneContent: {
-    backgroundColor: 'rgba(201,168,76,0.3)',
-    borderWidth: 3,
+    backgroundColor: 'rgba(201,168,76,0.4)',
+    borderWidth: 4,
     borderColor: C.gold,
-    borderRadius: 25,
-    paddingHorizontal: 30,
-    paddingVertical: 15,
+    borderRadius: 30,
+    paddingHorizontal: 40,
+    paddingVertical: 20,
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   
-  centerIcon: { fontSize: 28, color: C.gold },
-  centerText: { fontSize: 18, fontWeight: '900', color: C.gold },
+  centerIcon: { fontSize: 32, color: C.gold },
+  centerText: { fontSize: 20, fontWeight: '900', color: C.gold },
 
   leftZone: {
     position: 'absolute',
     left: 0, top: 0, bottom: 0,
-    width: '25%',
-    backgroundColor: 'rgba(201,168,76,0.15)',
-    borderRightWidth: 3,
+    width: '30%',
+    backgroundColor: 'rgba(255,0,0,0.2)',
+    borderRightWidth: 4,
     borderRightColor: C.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 15,
     zIndex: 10,
   },
   
   rightZone: {
     position: 'absolute',
     right: 0, top: 0, bottom: 0,
-    width: '25%',
-    backgroundColor: 'rgba(201,168,76,0.15)',
-    borderLeftWidth: 3,
+    width: '30%',
+    backgroundColor: 'rgba(0,0,255,0.2)',
+    borderLeftWidth: 4,
     borderLeftColor: C.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 15,
     zIndex: 10,
   },
   
-  zoneArrow: { fontSize: 24, fontWeight: '900', color: C.gold },
+  zoneArrow: { fontSize: 28, fontWeight: '900', color: C.gold },
   
   endBadge: {
     backgroundColor: C.gold,
-    borderRadius: 20,
-    minWidth: 40,
-    height: 40,
+    borderRadius: 25,
+    minWidth: 50,
+    height: 50,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
   },
   
-  endNumber: { fontSize: 20, fontWeight: '900', color: '#1a1200' },
+  endNumber: { fontSize: 24, fontWeight: '900', color: '#000' },
 
   topOpp: {
     paddingVertical: 8,
@@ -359,84 +308,41 @@ const S = StyleSheet.create({
     backgroundColor: 'rgba(8,18,8,0.5)',
     gap: 6,
   },
-  oppRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
+  oppRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   oppAv: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(201,168,76,0.15)',
-    borderWidth: 2,
-    borderColor: C.goldDim,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(201,168,76,0.15)', borderWidth: 2, borderColor: C.goldDim,
+    alignItems: 'center', justifyContent: 'center', position: 'relative',
   },
-  oppAvActive: {
-    borderColor: C.gold,
-    backgroundColor: 'rgba(201,168,76,0.25)',
-  },
+  oppAvActive: { borderColor: C.gold, backgroundColor: 'rgba(201,168,76,0.25)' },
   oppAvTxt: { fontSize: 14, fontWeight: '700', color: C.gold },
   oppInfo: { flex: 1 },
   oppName: { fontSize: 13, fontWeight: '700', color: C.text },
   oppCount: { fontSize: 10, color: C.dim, marginTop: 1 },
   turnBadge: {
-    backgroundColor: 'rgba(201,168,76,0.2)',
-    borderWidth: 1,
-    borderColor: C.gold,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    backgroundColor: 'rgba(201,168,76,0.2)', borderWidth: 1, borderColor: C.gold,
+    borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3,
   },
   turnBadgeTxt: { fontSize: 9, fontWeight: '800', color: C.gold, letterSpacing: 1 },
   turnRing: {
-    position: 'absolute',
-    top: -4, left: -4, right: -4, bottom: -4,
-    borderRadius: 999,
-    borderWidth: 2.5,
-    borderColor: C.gold,
+    position: 'absolute', top: -4, left: -4, right: -4, bottom: -4,
+    borderRadius: 999, borderWidth: 2.5, borderColor: C.gold,
   },
-  hiddenRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 2,
-  },
+  hiddenRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 2 },
   hiddenMore: { fontSize: 10, color: C.dim, marginLeft: 4 },
 
   sideOpp: {
-    width: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(8,18,8,0.25)',
+    width: 42, alignItems: 'center', justifyContent: 'center', gap: 4,
+    paddingVertical: 8, backgroundColor: 'rgba(8,18,8,0.25)',
   },
   sideAv: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(201,168,76,0.15)',
-    borderWidth: 1.5,
-    borderColor: C.goldDim,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(201,168,76,0.15)', borderWidth: 1.5, borderColor: C.goldDim,
+    alignItems: 'center', justifyContent: 'center', position: 'relative',
   },
-  sideAvActive: {
-    borderColor: C.gold,
-    backgroundColor: 'rgba(201,168,76,0.25)',
-  },
+  sideAvActive: { borderColor: C.gold, backgroundColor: 'rgba(201,168,76,0.25)' },
   sideAvTxt: { fontSize: 11, fontWeight: '700', color: C.gold },
-  sideName: {
-    fontSize: 7,
-    color: C.dim,
-    textAlign: 'center',
-    maxWidth: 38,
-  },
+  sideName: { fontSize: 7, color: C.dim, textAlign: 'center', maxWidth: 38 },
   sideCount: { fontSize: 10, fontWeight: '700', color: C.gold },
   sideHidden: { gap: 2, alignItems: 'center' },
 });
