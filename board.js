@@ -1,7 +1,8 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { DominoFace, C } from './domino';
 import { HiddenDomino } from './hand';
+import { GameLogic } from './GameLogic';
 
 export function BoardArea({
   board, boardSize, boardEnds,
@@ -9,79 +10,131 @@ export function BoardArea({
   showLeft, showRight, showCenter,
   onPlaySide, onLayout,
 }) {
-  console.log('🎲 Board:', { boardLength: board?.length, boardSize });
+  const [dominoPositions, setDominoPositions] = useState([]);
+
+  // Recalculer les positions à chaque changement
+  useEffect(() => {
+    if (board && board.length > 0) {
+      const positions = GameLogic.calculateBoardLayout(board, boardSize);
+      setDominoPositions(positions);
+    } else {
+      setDominoPositions([]);
+    }
+  }, [board, boardSize]);
+
+  console.log('🎲 Board:', { 
+    boardLength: board?.length, 
+    boardSize, 
+    positionsCount: dominoPositions.length 
+  });
 
   const isEmpty = !board || board.length === 0;
 
   return (
     <View style={S.boardArea} onLayout={onLayout}>
+      
+      {/* Info de debug améliorée */}
       <View style={S.debugInfo} pointerEvents="none">
         <Text style={S.debugText}>
-          Dominos: {board?.length || 0} | Taille: {boardSize.w?.toFixed(0)}×{boardSize.h?.toFixed(0)}
+          🎯 {board?.length || 0} dominos | {boardSize.w?.toFixed(0)}×{boardSize.h?.toFixed(0)}
         </Text>
+        {boardEnds && (
+          <Text style={S.debugText}>
+            Extrémités: {boardEnds.left} ◀━━━━▶ {boardEnds.right}
+          </Text>
+        )}
       </View>
 
-      {isEmpty && (
-        <View style={S.emptyBoard}>
-          <View style={S.emptyIcon}>
-            <Text style={S.emptyIconTxt}>🎯</Text>
-          </View>
-          <Text style={S.emptyTxt}>Posez le premier domino</Text>
-          <Text style={S.emptyHint}>Sélectionnez un domino dans votre main</Text>
-        </View>
-      )}
+      {/* Plateau scrollable pour grandes parties */}
+      <ScrollView
+        style={S.boardScroll}
+        contentContainerStyle={S.boardContent}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        showsVerticalScrollIndicator={false}
+        minimumZoomScale={0.3}
+        maximumZoomScale={1.5}
+        bouncesZoom
+      >
+        <View style={S.gameArea}>
+          
+          {/* Plateau vide */}
+          {isEmpty && (
+            <View style={S.emptyBoard}>
+              <View style={S.emptyIcon}>
+                <Text style={S.emptyIconTxt}>🎯</Text>
+              </View>
+              <Text style={S.emptyTxt}>Posez le premier domino</Text>
+              <Text style={S.emptyHint}>
+                {isMyTurn 
+                  ? 'Sélectionnez un domino dans votre main'
+                  : 'En attente du premier joueur...'
+                }
+              </Text>
+            </View>
+          )}
 
-      {board && board.map((tile, i) => {
-        const isVertical = tile.rotation === 90;
-        const dominoWidth = isVertical ? 50 : 100;
-        const dominoHeight = isVertical ? 100 : 50;
-        const centerX = (boardSize.w || 400) / 2;
-        const centerY = (boardSize.h || 300) / 2;
-        const offsetX = (i - Math.floor(board.length / 2)) * (dominoWidth + 10);
-        const posX = centerX + offsetX - dominoWidth / 2;
-        const posY = centerY - dominoHeight / 2;
-        const valueA = tile.piece?.[0] ?? tile.a ?? 0;
-        const valueB = tile.piece?.[1] ?? tile.b ?? 0;
+          {/* Dominos placés avec positions intelligentes */}
+          {dominoPositions.map((position, i) => {
+            const tile = board[i];
+            const values = GameLogic.extractDominoValues(tile);
+            const isDouble = values.a === values.b;
 
-        console.log(`🎲 Domino ${i}:`, {
-          values: [valueA, valueB],
-          position: { x: posX.toFixed(1), y: posY.toFixed(1) },
-          size: { w: dominoWidth, h: dominoHeight }
-        });
+            return (
+              <View 
+                key={`smart-domino-${i}-${values.a}-${values.b}`}
+                style={[
+                  S.placedDomino,
+                  {
+                    left: position.x,
+                    top: position.y,
+                    zIndex: 30 + i,
+                    transform: [{ rotate: `${position.rotation}deg` }],
+                  }
+                ]}
+              >
+                <DominoFace
+                  a={values.a}
+                  b={values.b}
+                  w={position.width}
+                  h={position.height}
+                  vertical={isDouble}
+                  borderColor="#000"
+                  borderWidth={2}
+                  extraStyle={{
+                    backgroundColor: '#ffffff',
+                    elevation: 30 + i,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 2, height: 2 },
+                    shadowOpacity: 0.4,
+                    shadowRadius: 4,
+                  }}
+                />
+                
+                {/* Numéro d'ordre (mode debug) */}
+                {__DEV__ && (
+                  <View style={S.orderBadge}>
+                    <Text style={S.orderText}>{i + 1}</Text>
+                  </View>
+                )}
+              </View>
+            );
+          })}
 
-        return (
-          <View 
-            key={`domino-${i}-${valueA}-${valueB}-${Date.now()}`}
-            style={{
-              position: 'absolute',
-              left: posX,
-              top: posY,
-              zIndex: 30 + i,
-              borderWidth: 2,
-              borderColor: '#ffff00',
-            }}
-          >
-            <DominoFace
-              a={valueA}
-              b={valueB}
-              w={dominoWidth}
-              h={dominoHeight}
-              vertical={isVertical}
-              borderColor="#000"
-              borderWidth={3}
-              extraStyle={{
-                backgroundColor: '#ffffff',
-                elevation: 30 + i,
-                shadowColor: '#000',
-                shadowOffset: { width: 3, height: 3 },
-                shadowOpacity: 1,
-                shadowRadius: 5,
-              }}
+          {/* Preview du domino sélectionné */}
+          {isMyTurn && selPiece && !isEmpty && (
+            <DominoPreview 
+              piece={selPiece}
+              boardEnds={boardEnds}
+              showLeft={showLeft}
+              showRight={showRight}
+              positions={dominoPositions}
             />
-          </View>
-        );
-      })}
+          )}
+        </View>
+      </ScrollView>
 
+      {/* Zones de placement améliorées */}
       {showCenter && (
         <TouchableOpacity 
           style={S.centerZone} 
@@ -89,8 +142,9 @@ export function BoardArea({
           activeOpacity={0.7}
         >
           <View style={S.centerZoneContent}>
-            <Text style={S.centerIcon}>✓</Text>
-            <Text style={S.centerText}>Placer ici</Text>
+            <Text style={S.centerIcon}>🎯</Text>
+            <Text style={S.centerText}>COMMENCER ICI</Text>
+            <Text style={S.centerHint}>Premier domino</Text>
           </View>
         </TouchableOpacity>
       )}
@@ -107,6 +161,7 @@ export function BoardArea({
               <View style={S.endBadge}>
                 <Text style={S.endNumber}>{boardEnds?.left || 0}</Text>
               </View>
+              <Text style={S.zoneLabel}>GAUCHE</Text>
             </TouchableOpacity>
           )}
           
@@ -116,6 +171,7 @@ export function BoardArea({
               onPress={() => onPlaySide('right')} 
               activeOpacity={0.7}
             >
+              <Text style={S.zoneLabel}>DROITE</Text>
               <View style={S.endBadge}>
                 <Text style={S.endNumber}>{boardEnds?.right || 0}</Text>
               </View>
@@ -125,6 +181,57 @@ export function BoardArea({
         </>
       )}
     </View>
+  );
+}
+
+// Composant de preview intelligent
+function DominoPreview({ piece, boardEnds, showLeft, showRight, positions }) {
+  if (!piece || !positions || positions.length === 0) return null;
+
+  const lastPosition = positions[positions.length - 1];
+  const previewWidth = piece[0] === piece[1] ? 50 : 100;
+  const previewHeight = piece[0] === piece[1] ? 100 : 50;
+
+  return (
+    <>
+      {showLeft && (
+        <View style={[
+          S.previewDomino,
+          {
+            left: positions[0].x - previewWidth - 10,
+            top: positions[0].y,
+          }
+        ]}>
+          <DominoFace
+            a={piece[0]}
+            b={piece[1]}
+            w={previewWidth}
+            h={previewHeight}
+            vertical={piece[0] === piece[1]}
+            extraStyle={S.previewStyle}
+          />
+        </View>
+      )}
+      
+      {showRight && (
+        <View style={[
+          S.previewDomino,
+          {
+            left: lastPosition.x + lastPosition.width + 10,
+            top: lastPosition.y,
+          }
+        ]}>
+          <DominoFace
+            a={piece[0]}
+            b={piece[1]}
+            w={previewWidth}
+            h={previewHeight}
+            vertical={piece[0] === piece[1]}
+            extraStyle={S.previewStyle}
+          />
+        </View>
+      )}
+    </>
   );
 }
 
@@ -144,7 +251,7 @@ export function TopOpponent({ player, handCount, isCurrentTurn }) {
         </View>
         {isCurrentTurn && (
           <View style={S.turnBadge}>
-            <Text style={S.turnBadgeTxt}>SON TOUR</Text>
+            <Text style={S.turnBadgeTxt}>🎯 SON TOUR</Text>
           </View>
         )}
       </View>
@@ -185,8 +292,23 @@ const S = StyleSheet.create({
     backgroundColor: '#1e4d1e',
     margin: 4,
     borderRadius: 12,
-    borderWidth: 3,
-    borderColor: '#ffaa00',
+    borderWidth: 2,
+    borderColor: C.gold,
+  },
+
+  boardScroll: {
+    flex: 1,
+  },
+
+  boardContent: {
+    minWidth: 1200,
+    minHeight: 600,
+  },
+
+  gameArea: {
+    flex: 1,
+    position: 'relative',
+    padding: 20,
   },
 
   debugInfo: {
@@ -200,9 +322,9 @@ const S = StyleSheet.create({
   },
   
   debugText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: 'bold',
+    color: C.gold,
+    fontSize: 10,
+    fontWeight: '600',
   },
 
   emptyBoard: {
@@ -213,93 +335,167 @@ const S = StyleSheet.create({
   },
   
   emptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: 'rgba(201,168,76,0.2)',
     borderWidth: 3,
     borderColor: C.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 15,
+    marginBottom: 20,
   },
   
-  emptyIconTxt: { fontSize: 36 },
+  emptyIconTxt: { 
+    fontSize: 48,
+  },
   
   emptyTxt: {
     color: C.gold,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
+    textAlign: 'center',
   },
   
   emptyHint: {
-    color: '#aaa',
+    color: C.dim,
     fontSize: 14,
+    textAlign: 'center',
+  },
+
+  placedDomino: {
+    position: 'absolute',
+  },
+
+  previewDomino: {
+    position: 'absolute',
+    zIndex: 100,
+  },
+
+  previewStyle: {
+    opacity: 0.7,
+    borderColor: C.gold,
+    borderWidth: 3,
+    borderStyle: 'dashed',
+  },
+
+  orderBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#ff4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  orderText: {
+    fontSize: 8,
+    color: 'white',
+    fontWeight: 'bold',
   },
 
   centerZone: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(255,255,0,0.2)',
+    backgroundColor: 'rgba(201,168,76,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 5,
   },
   
   centerZoneContent: {
-    backgroundColor: 'rgba(201,168,76,0.4)',
+    backgroundColor: 'rgba(201,168,76,0.3)',
     borderWidth: 4,
     borderColor: C.gold,
     borderRadius: 30,
     paddingHorizontal: 40,
-    paddingVertical: 20,
+    paddingVertical: 25,
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   
-  centerIcon: { fontSize: 32, color: C.gold },
-  centerText: { fontSize: 20, fontWeight: '900', color: C.gold },
+  centerIcon: { 
+    fontSize: 40, 
+    marginBottom: 5,
+  },
+  
+  centerText: { 
+    fontSize: 18, 
+    fontWeight: '900', 
+    color: C.gold,
+    letterSpacing: 2,
+  },
+
+  centerHint: {
+    fontSize: 12,
+    color: C.goldDim,
+    fontWeight: '600',
+  },
 
   leftZone: {
     position: 'absolute',
     left: 0, top: 0, bottom: 0,
-    width: '30%',
-    backgroundColor: 'rgba(255,0,0,0.2)',
+    width: '25%',
+    backgroundColor: 'rgba(255,100,100,0.2)',
     borderRightWidth: 4,
     borderRightColor: C.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 15,
+    gap: 12,
     zIndex: 10,
   },
   
   rightZone: {
     position: 'absolute',
     right: 0, top: 0, bottom: 0,
-    width: '30%',
-    backgroundColor: 'rgba(0,0,255,0.2)',
+    width: '25%',
+    backgroundColor: 'rgba(100,255,100,0.2)',
     borderLeftWidth: 4,
     borderLeftColor: C.gold,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 15,
+    gap: 12,
     zIndex: 10,
   },
   
-  zoneArrow: { fontSize: 28, fontWeight: '900', color: C.gold },
+  zoneArrow: { 
+    fontSize: 32, 
+    fontWeight: '900', 
+    color: C.gold,
+  },
+
+  zoneLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: C.gold,
+    letterSpacing: 2,
+  },
   
   endBadge: {
     backgroundColor: C.gold,
-    borderRadius: 25,
-    minWidth: 50,
-    height: 50,
+    borderRadius: 30,
+    minWidth: 60,
+    height: 60,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
   
-  endNumber: { fontSize: 24, fontWeight: '900', color: '#000' },
+  endNumber: { 
+    fontSize: 28, 
+    fontWeight: '900', 
+    color: '#000',
+  },
 
+  // Styles adversaires (gardés identiques)
   topOpp: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -326,23 +522,4 @@ const S = StyleSheet.create({
   turnBadgeTxt: { fontSize: 9, fontWeight: '800', color: C.gold, letterSpacing: 1 },
   turnRing: {
     position: 'absolute', top: -4, left: -4, right: -4, bottom: -4,
-    borderRadius: 999, borderWidth: 2.5, borderColor: C.gold,
-  },
-  hiddenRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 2 },
-  hiddenMore: { fontSize: 10, color: C.dim, marginLeft: 4 },
-
-  sideOpp: {
-    width: 42, alignItems: 'center', justifyContent: 'center', gap: 4,
-    paddingVertical: 8, backgroundColor: 'rgba(8,18,8,0.25)',
-  },
-  sideAv: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(201,168,76,0.15)', borderWidth: 1.5, borderColor: C.goldDim,
-    alignItems: 'center', justifyContent: 'center', position: 'relative',
-  },
-  sideAvActive: { borderColor: C.gold, backgroundColor: 'rgba(201,168,76,0.25)' },
-  sideAvTxt: { fontSize: 11, fontWeight: '700', color: C.gold },
-  sideName: { fontSize: 7, color: C.dim, textAlign: 'center', maxWidth: 38 },
-  sideCount: { fontSize: 10, fontWeight: '700', color: C.gold },
-  sideHidden: { gap: 2, alignItems: 'center' },
-});
+    borderRadius:
