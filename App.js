@@ -1,4 +1,3 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, StatusBar, ScrollView, Platform } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, StatusBar, ScrollView, Platform } from 'react-native';
 import { io } from 'socket.io-client';
@@ -6,6 +5,7 @@ import { DominoFace, C, HPAD, HGAP } from './domino';
 import { HandArea } from './hand';
 import { BoardArea, TopOpponent, SideOpponent } from './board';
 import { GameLogic } from './GameLogic';
+
 
 const SERVER_URL = 'https://domino-bloque.onrender.com';
 const { width } = Dimensions.get('window');
