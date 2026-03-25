@@ -12,20 +12,21 @@ export function BoardArea({
 }) {
   const [dominoPositions, setDominoPositions] = useState([]);
 
-  // Fonction de calcul de serpent intelligent
-  function calculateSmartBoardLayout(board, boardSize) {
+  // Algorithme de ligne qui se plie (vraies règles dominos)
+  function calculateRealDominoLayout(board, boardSize) {
     if (!board || board.length === 0) return [];
     
     const positions = [];
     const DOMINO_WIDTH = 60;
     const DOMINO_HEIGHT = 30;
-    const MARGIN = 8;
-    const MAX_WIDTH = (boardSize.w || 800) - 100;
+    const MARGIN = 5;
+    const MAX_WIDTH = (boardSize.w || 800) - 80;
+    const MAX_HEIGHT = (boardSize.h || 600) - 80;
     
-    let currentX = 0;
-    let currentY = 0;
-    let direction = 1; // 1 = droite, -1 = gauche
-    let lineStartX = 0;
+    // Commencer au centre
+    let currentX = MAX_WIDTH / 2 - DOMINO_WIDTH / 2;
+    let currentY = 50;
+    let direction = 'right'; // 'right', 'left', 'down', 'up'
     
     board.forEach((piece, index) => {
       const values = GameLogic.extractDominoValues ? 
@@ -33,47 +34,74 @@ export function BoardArea({
         { a: piece[0], b: piece[1] };
       
       const isDouble = values.a === values.b;
-      const width = isDouble ? DOMINO_HEIGHT : DOMINO_WIDTH;
-      const height = isDouble ? DOMINO_WIDTH : DOMINO_HEIGHT;
+      let width = DOMINO_WIDTH;
+      let height = DOMINO_HEIGHT;
+      let rotation = 0;
       
-      // Premier domino au centre
-      if (index === 0) {
-        currentX = MAX_WIDTH / 2 - width / 2;
-        lineStartX = currentX;
-        positions.push({
-          x: currentX,
-          y: currentY,
-          width,
-          height,
-          rotation: 0
-        });
-        currentX += width + MARGIN;
-        return;
+      // Doubles sont verticaux
+      if (isDouble) {
+        width = DOMINO_HEIGHT;
+        height = DOMINO_WIDTH;
+        rotation = 90;
       }
       
-      // Vérifier si on dépasse la largeur
-      if (direction > 0 && currentX + width > MAX_WIDTH) {
+      // Ajuster selon la direction
+      if (direction === 'down' || direction === 'up') {
+        if (!isDouble) {
+          // Domino normal devient vertical dans direction verticale
+          const temp = width;
+          width = height;
+          height = temp;
+          rotation = 90;
+        }
+      }
+      
+      // Vérifier les limites et changer de direction si nécessaire
+      if (direction === 'right' && currentX + width > MAX_WIDTH) {
+        // Aller vers le bas
         currentY += height + MARGIN;
-        direction = -1;
         currentX = MAX_WIDTH - width;
-      } else if (direction < 0 && currentX < 0) {
+        direction = 'left';
+      } else if (direction === 'left' && currentX < 0) {
+        // Aller vers le bas
         currentY += height + MARGIN;
-        direction = 1;
-        currentX = lineStartX;
+        currentX = 0;
+        direction = 'right';
+      } else if (direction === 'down' && currentY + height > MAX_HEIGHT) {
+        // Aller vers la gauche
+        currentX -= width + MARGIN;
+        currentY = MAX_HEIGHT - height;
+        direction = 'up';
+      } else if (direction === 'up' && currentY < 0) {
+        // Aller vers la droite
+        currentX += width + MARGIN;
+        currentY = 0;
+        direction = 'down';
       }
       
+      // Placer le domino
       positions.push({
         x: currentX,
         y: currentY,
         width,
         height,
-        rotation: 0
+        rotation
       });
       
-      if (direction > 0) {
-        currentX += width + MARGIN;
-      } else {
-        currentX -= width + MARGIN;
+      // Avancer pour le prochain domino
+      switch(direction) {
+        case 'right':
+          currentX += width + MARGIN;
+          break;
+        case 'left':
+          currentX -= width + MARGIN;
+          break;
+        case 'down':
+          currentY += height + MARGIN;
+          break;
+        case 'up':
+          currentY -= height + MARGIN;
+          break;
       }
     });
     
@@ -82,7 +110,7 @@ export function BoardArea({
 
   useEffect(() => {
     if (board && board.length > 0) {
-      const positions = calculateSmartBoardLayout(board, boardSize);
+      const positions = calculateRealDominoLayout(board, boardSize);
       setDominoPositions(positions);
     } else {
       setDominoPositions([]);
@@ -114,13 +142,14 @@ export function BoardArea({
       <ScrollView
         style={S.boardScroll}
         contentContainerStyle={[S.boardContent, { 
-          minHeight: Math.max(600, (dominoPositions[dominoPositions.length - 1]?.y || 0) + 200) 
+          minHeight: Math.max(600, Math.max(...dominoPositions.map(p => p.y + p.height)) + 100),
+          minWidth: Math.max(800, Math.max(...dominoPositions.map(p => p.x + p.width)) + 100)
         }]}
-        horizontal={false}
-        showsHorizontalScrollIndicator={false}
+        horizontal={true}
+        showsHorizontalScrollIndicator={true}
         showsVerticalScrollIndicator={true}
-        minimumZoomScale={0.3}
-        maximumZoomScale={1.5}
+        minimumZoomScale={0.5}
+        maximumZoomScale={2.0}
         bouncesZoom
       >
         <View style={S.gameArea}>
@@ -149,7 +178,7 @@ export function BoardArea({
 
             return (
               <View 
-                key={`smart-domino-${i}-${values.a}-${values.b}`}
+                key={`domino-${i}-${values.a}-${values.b}`}
                 style={[
                   S.placedDomino,
                   {
@@ -165,16 +194,16 @@ export function BoardArea({
                   b={values.b}
                   w={position.width}
                   h={position.height}
-                  vertical={isDouble}
-                  borderColor="#000"
+                  vertical={position.rotation === 90}
+                  borderColor="#333"
                   borderWidth={2}
                   extraStyle={{
                     backgroundColor: '#ffffff',
                     elevation: 30 + i,
                     shadowColor: '#000',
                     shadowOffset: { width: 2, height: 2 },
-                    shadowOpacity: 0.4,
-                    shadowRadius: 4,
+                    shadowOpacity: 0.3,
+                    shadowRadius: 3,
                   }}
                 />
                 
@@ -213,41 +242,37 @@ export function BoardArea({
         </TouchableOpacity>
       )}
 
-      {(showLeft || showRight) && (
+      {(showLeft || showRight) && dominoPositions.length > 0 && (
         <>
           {showLeft && dominoPositions[0] && (
             <TouchableOpacity 
-              style={[S.leftZone, {
-                left: Math.max(0, dominoPositions[0].x - 80),
-                top: dominoPositions[0].y,
-                width: 70,
-                height: 60
+              style={[S.playZone, {
+                left: Math.max(10, dominoPositions[0].x - 70),
+                top: dominoPositions[0].y + 5,
+                backgroundColor: 'rgba(255,100,100,0.9)'
               }]} 
               onPress={() => onPlaySide('left')} 
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
               <Text style={S.zoneArrow}>◀</Text>
-              <View style={S.endBadge}>
-                <Text style={S.endNumber}>{boardEnds?.left || 0}</Text>
-              </View>
+              <Text style={S.zoneNumber}>{boardEnds?.left || 0}</Text>
+              <Text style={S.zoneLabel}>GAUCHE</Text>
             </TouchableOpacity>
           )}
           
           {showRight && dominoPositions.length > 0 && (
             <TouchableOpacity 
-              style={[S.rightZone, {
+              style={[S.playZone, {
                 left: dominoPositions[dominoPositions.length - 1].x + dominoPositions[dominoPositions.length - 1].width + 10,
-                top: dominoPositions[dominoPositions.length - 1].y,
-                width: 70,
-                height: 60
+                top: dominoPositions[dominoPositions.length - 1].y + 5,
+                backgroundColor: 'rgba(100,255,100,0.9)'
               }]} 
               onPress={() => onPlaySide('right')} 
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
-              <View style={S.endBadge}>
-                <Text style={S.endNumber}>{boardEnds?.right || 0}</Text>
-              </View>
+              <Text style={S.zoneNumber}>{boardEnds?.right || 0}</Text>
               <Text style={S.zoneArrow}>▶</Text>
+              <Text style={S.zoneLabel}>DROITE</Text>
             </TouchableOpacity>
           )}
         </>
@@ -260,16 +285,16 @@ function DominoPreview({ piece, boardEnds, showLeft, showRight, positions }) {
   if (!piece || !positions || positions.length === 0) return null;
 
   const lastPosition = positions[positions.length - 1];
-  const previewWidth = piece[0] === piece[1] ? 50 : 100;
-  const previewHeight = piece[0] === piece[1] ? 100 : 50;
+  const previewWidth = piece[0] === piece[1] ? 30 : 60;
+  const previewHeight = piece[0] === piece[1] ? 60 : 30;
 
   return (
     <>
-      {showLeft && (
+      {showLeft && positions[0] && (
         <View style={[
           S.previewDomino,
           {
-            left: positions[0].x - previewWidth - 10,
+            left: positions[0].x - previewWidth - 15,
             top: positions[0].y,
           }
         ]}>
@@ -284,11 +309,11 @@ function DominoPreview({ piece, boardEnds, showLeft, showRight, positions }) {
         </View>
       )}
       
-      {showRight && (
+      {showRight && lastPosition && (
         <View style={[
           S.previewDomino,
           {
-            left: lastPosition.x + lastPosition.width + 10,
+            left: lastPosition.x + lastPosition.width + 15,
             top: lastPosition.y,
           }
         ]}>
@@ -360,7 +385,7 @@ const S = StyleSheet.create({
   boardArea: {
     flex: 1,
     position: 'relative',
-    backgroundColor: '#1e4d1e',
+    backgroundColor: '#0f5132',
     margin: 4,
     borderRadius: 12,
     borderWidth: 2,
@@ -374,12 +399,12 @@ const S = StyleSheet.create({
   boardContent: {
     minWidth: 800,
     minHeight: 600,
+    padding: 20,
   },
 
   gameArea: {
     flex: 1,
     position: 'relative',
-    padding: 20,
   },
 
   debugInfo: {
@@ -403,6 +428,7 @@ const S = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 15,
+    minHeight: 400,
   },
   
   emptyIcon: {
@@ -444,7 +470,7 @@ const S = StyleSheet.create({
   },
 
   previewStyle: {
-    opacity: 0.7,
+    opacity: 0.8,
     borderColor: C.gold,
     borderWidth: 3,
     borderStyle: 'dashed',
@@ -454,16 +480,16 @@ const S = StyleSheet.create({
     position: 'absolute',
     top: -8,
     right: -8,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: '#ff4444',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   orderText: {
-    fontSize: 8,
+    fontSize: 9,
     color: 'white',
     fontWeight: 'bold',
   },
@@ -506,58 +532,42 @@ const S = StyleSheet.create({
     fontWeight: '600',
   },
 
-  leftZone: {
+  playZone: {
     position: 'absolute',
-    backgroundColor: 'rgba(255,100,100,0.8)',
-    borderRadius: 8,
+    width: 60,
+    height: 80,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    zIndex: 10,
-  },
-  
-  rightZone: {
-    position: 'absolute',
-    backgroundColor: 'rgba(100,255,100,0.8)',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    zIndex: 10,
+    gap: 2,
+    zIndex: 50,
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   
   zoneArrow: { 
-    fontSize: 16, 
+    fontSize: 20, 
     fontWeight: '900', 
     color: '#fff',
   },
 
-  zoneLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: C.gold,
-    letterSpacing: 2,
-  },
-  
-  endBadge: {
-    backgroundColor: C.gold,
-    borderRadius: 15,
-    minWidth: 30,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-  },
-  
-  endNumber: { 
-    fontSize: 14, 
+  zoneNumber: { 
+    fontSize: 16, 
     fontWeight: '900', 
-    color: '#000',
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+
+  zoneLabel: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 1,
   },
 
   topOpp: {
