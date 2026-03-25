@@ -24,7 +24,7 @@ export const C = {
 export const HPAD = 8;
 export const HGAP = 3;
 export const HDW  = Math.floor((width - HPAD * 2 - HGAP * 6) / 7);
-export const HDH  = Math.floor(HDW * 2.1); // Ratio plus réaliste
+export const HDH  = Math.floor(HDW * 2.1);
 
 // ── Positions des points améliorées ──────────────────────────────────────────
 const DOT_POSITIONS = {
