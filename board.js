@@ -12,15 +12,199 @@ export function BoardArea({
 }) {
   const [dominoPositions, setDominoPositions] = useState([]);
 
+  // Fonction pour calculer la VRAIE prochaine position collée
+  function getNextPosition(currentEnd, dominoWidth, dominoHeight, isDouble, boardSize, margin, spacing) {
+    let { x, y, direction } = currentEnd;
+    let width = dominoWidth;
+    let height = dominoHeight;
+    let rotation = 0;
+    let newDirection = direction;
+    
+    // Ajuster pour les doubles
+    if (isDouble) {
+      if (direction === 'left' || direction === 'right') {
+        width = dominoHeight;
+        height = dominoWidth;
+        rotation = 90;
+      }
+    } else {
+      // Domino normal selon la direction
+      if (direction === 'up' || direction === 'down') {
+        width = dominoHeight; 
+        height = dominoWidth;
+        rotation = 90;
+      }
+    }
+    
+    // Calculer position COLLÉE selon direction
+    let newX, newY;
+    
+    switch (direction) {
+      case 'right':
+        newX = x + spacing;
+        newY = y - height / 2;
+        // Vérifier limite droite
+        if (newX + width > boardSize.w - margin) {
+          newDirection = 'down';
+          newX = x - width / 2;
+          newY = y + spacing;
+          width = dominoHeight;
+          height = dominoWidth; 
+          rotation = 90;
+        }
+        break;
+        
+      case 'left':
+        newX = x - width - spacing;
+        newY = y - height / 2;
+        // Vérifier limite gauche
+        if (newX < margin) {
+          newDirection = 'down';
+          newX = x - width / 2;
+          newY = y + spacing;
+          width = dominoHeight;
+          height = dominoWidth;
+          rotation = 90;
+        }
+        break;
+        
+      case 'down':
+        newX = x - width / 2;
+        newY = y + spacing;
+        // Vérifier limite bas
+        if (newY + height > boardSize.h - margin) {
+          newDirection = direction === 'right' ? 'left' : 'right';
+          newX = direction === 'right' ? x - width - spacing : x + spacing;
+          newY = y - height / 2;
+          width = dominoWidth;
+          height = dominoHeight;
+          rotation = 0;
+        }
+        break;
+        
+      case 'up':
+        newX = x - width / 2;
+        newY = y - height - spacing;
+        // Vérifier limite haut
+        if (newY < margin) {
+          newDirection = direction === 'right' ? 'left' : 'right';
+          newX = direction === 'right' ? x - width - spacing : x + spacing;
+          newY = y - height / 2;
+          width = dominoWidth;
+          height = dominoHeight;
+          rotation = 0;
+        }
+        break;
+    }
+    
+    // Calculer la nouvelle extrémité RÉELLE
+    let newEnd;
+    switch (newDirection) {
+      case 'right':
+        newEnd = { x: newX + width, y: newY + height / 2, direction: newDirection };
+        break;
+      case 'left':
+        newEnd = { x: newX, y: newY + height / 2, direction: newDirection };
+        break;
+      case 'down':
+        newEnd = { x: newX + width / 2, y: newY + height, direction: newDirection };
+        break;
+      case 'up':
+        newEnd = { x: newX + width / 2, y: newY, direction: newDirection };
+        break;
+    }
+    
+    return {
+      x: newX,
+      y: newY, 
+      width,
+      height,
+      rotation,
+      newEnd
+    };
+  }
+
+  // Algorithme de chaîne réelle qui se colle
+  function calculateRealChainLayout(board, boardSize) {
+    if (!board || board.length === 0) return [];
+    
+    const positions = [];
+    const DOMINO_WIDTH = 60;
+    const DOMINO_HEIGHT = 30;
+    const SPACING = 2; // Très petit espace pour que ça se touche
+    const MARGIN = 40;
+    
+    // Commencer au centre
+    const centerX = boardSize.w / 2;
+    const centerY = boardSize.h / 2;
+    
+    // Suivre les vraies extrémités de la chaîne
+    let leftEnd = { x: centerX, y: centerY, direction: 'left' };
+    let rightEnd = { x: centerX, y: centerY, direction: 'right' };
+    
+    board.forEach((piece, index) => {
+      const values = GameLogic.extractDominoValues ? 
+        GameLogic.extractDominoValues(piece) : 
+        { a: piece[0], b: piece[1] };
+      
+      const isDouble = values.a === values.b;
+      
+      let width = isDouble ? DOMINO_HEIGHT : DOMINO_WIDTH;
+      let height = isDouble ? DOMINO_WIDTH : DOMINO_HEIGHT;
+      let rotation = isDouble ? 90 : 0;
+      let x, y;
+      
+      if (index === 0) {
+        // Premier domino au centre
+        x = centerX - width / 2;
+        y = centerY - height / 2;
+        
+        // Initialiser les extrémités réelles
+        leftEnd = { x: x, y: y + height / 2, direction: 'left' };
+        rightEnd = { x: x + width, y: y + height / 2, direction: 'right' };
+        
+      } else {
+        // Alterner entre gauche et droite pour équilibrer
+        const addToRight = index % 2 === 1;
+        
+        if (addToRight) {
+          // Ajouter à droite - SE COLLER au dernier domino
+          const result = getNextPosition(rightEnd, width, height, isDouble, boardSize, MARGIN, SPACING);
+          x = result.x;
+          y = result.y;
+          rotation = result.rotation;
+          width = result.width;
+          height = result.height;
+          
+          // Mettre à jour l'extrémité droite RÉELLE
+          rightEnd = result.newEnd;
+          
+        } else {
+          // Ajouter à gauche - SE COLLER au premier domino  
+          const result = getNextPosition(leftEnd, width, height, isDouble, boardSize, MARGIN, SPACING);
+          x = result.x;
+          y = result.y; 
+          rotation = result.rotation;
+          width = result.width;
+          height = result.height;
+          
+          // Mettre à jour l'extrémité gauche RÉELLE
+          leftEnd = result.newEnd;
+        }
+      }
+      
+      positions.push({ x, y, width, height, rotation });
+    });
+    
+    return positions;
+  }
+
   useEffect(() => {
     if (board && board.length > 0) {
-      console.log('🎯 Calcul positions avec GameLogic:', { board, boardSize });
+      console.log('🎯 Calcul positions avec chaîne réelle:', { board, boardSize });
       
-      // Utiliser ta vraie logique de GameLogic
-      let positions = GameLogic.calculateBoardLayout(board, boardSize);
-      
-      // Optimiser pour l'écran mobile
-      positions = GameLogic.optimizeLayoutForScreen(positions, boardSize.w, boardSize.h);
+      // Utiliser la logique de chaîne réelle
+      const positions = calculateRealChainLayout(board, boardSize);
       
       setDominoPositions(positions);
       console.log('✅ Positions calculées:', positions.length);
@@ -29,7 +213,7 @@ export function BoardArea({
     }
   }, [board, boardSize]);
 
-  console.log('🎲 Board (GameLogic):', { 
+  console.log('🎲 Board (Real Chain):', { 
     boardLength: board?.length, 
     boardSize, 
     positionsCount: dominoPositions.length 
@@ -42,7 +226,7 @@ export function BoardArea({
       
       <View style={S.debugInfo} pointerEvents="none">
         <Text style={S.debugText}>
-          🎯 {board?.length || 0} dominos (GameLogic) | {boardSize.w?.toFixed(0)}×{boardSize.h?.toFixed(0)}
+          🔗 {board?.length || 0} dominos (chaîne) | {boardSize.w?.toFixed(0)}×{boardSize.h?.toFixed(0)}
         </Text>
         {boardEnds && (
           <Text style={S.debugText}>
@@ -69,12 +253,12 @@ export function BoardArea({
           {isEmpty && (
             <View style={S.emptyBoard}>
               <View style={S.emptyIcon}>
-                <Text style={S.emptyIconTxt}>🎯</Text>
+                <Text style={S.emptyIconTxt}>🔗</Text>
               </View>
               <Text style={S.emptyTxt}>Posez le premier domino</Text>
               <Text style={S.emptyHint}>
                 {isMyTurn 
-                  ? 'Les dominos se disposeront intelligemment'
+                  ? 'Les dominos formeront une chaîne'
                   : 'En attente du premier joueur...'
                 }
               </Text>
@@ -85,8 +269,9 @@ export function BoardArea({
             const tile = board[i];
             if (!tile) return null;
             
-            const values = GameLogic.extractDominoValues(tile);
-            const isDouble = values.a === values.b;
+            const values = GameLogic.extractDominoValues ? 
+              GameLogic.extractDominoValues(tile) : 
+              { a: tile[0], b: tile[1] };
 
             return (
               <View 
@@ -148,8 +333,8 @@ export function BoardArea({
           activeOpacity={0.7}
         >
           <View style={S.centerZoneContent}>
-            <Text style={S.centerIcon}>🎯</Text>
-            <Text style={S.centerText}>COMMENCER ICI</Text>
+            <Text style={S.centerIcon}>🔗</Text>
+            <Text style={S.centerText}>COMMENCER LA CHAÎNE</Text>
             <Text style={S.centerHint}>Premier domino au centre</Text>
           </View>
         </TouchableOpacity>
@@ -197,50 +382,52 @@ export function BoardArea({
 function DominoPreview({ piece, boardEnds, showLeft, showRight, positions, board }) {
   if (!piece || !positions || positions.length === 0) return null;
 
-  // Calculer où le nouveau domino serait placé avec ta logique
-  const newBoard = [...board, piece];
-  const newPositions = GameLogic.calculateBoardLayout(newBoard, { w: 800, h: 600 });
-  const previewPosition = newPositions[newPositions.length - 1];
+  const lastPosition = positions[positions.length - 1];
+  const firstPosition = positions[0];
   
-  if (!previewPosition) return null;
-
-  const values = GameLogic.extractDominoValues(piece);
+  const values = GameLogic.extractDominoValues ? 
+    GameLogic.extractDominoValues(piece) : 
+    { a: piece[0], b: piece[1] };
+  
+  const isDouble = values.a === values.b;
+  const previewWidth = isDouble ? 30 : 60;
+  const previewHeight = isDouble ? 60 : 30;
 
   return (
     <>
-      {showLeft && (
+      {showLeft && firstPosition && (
         <View style={[
           S.previewDomino,
           {
-            left: previewPosition.x,
-            top: previewPosition.y,
+            left: firstPosition.x - previewWidth - 15,
+            top: firstPosition.y,
           }
         ]}>
           <DominoFace
             a={values.a}
             b={values.b}
-            w={previewPosition.width}
-            h={previewPosition.height}
-            vertical={previewPosition.rotation === 90}
+            w={previewWidth}
+            h={previewHeight}
+            vertical={isDouble}
             extraStyle={S.previewStyle}
           />
         </View>
       )}
       
-      {showRight && (
+      {showRight && lastPosition && (
         <View style={[
           S.previewDomino,
           {
-            left: previewPosition.x,
-            top: previewPosition.y,
+            left: lastPosition.x + lastPosition.width + 15,
+            top: lastPosition.y,
           }
         ]}>
           <DominoFace
             a={values.a}
             b={values.b}
-            w={previewPosition.width}
-            h={previewPosition.height}
-            vertical={previewPosition.rotation === 90}
+            w={previewWidth}
+            h={previewHeight}
+            vertical={isDouble}
             extraStyle={S.previewStyle}
           />
         </View>
