@@ -12,16 +12,109 @@ export function BoardArea({
 }) {
   const [dominoPositions, setDominoPositions] = useState([]);
 
-  // Algorithme de disposition en spirale pour mobile
-  function calculateSpiralDominoLayout(board, boardSize) {
+  // Fonction helper pour calculer la prochaine position
+  function calculateNextPosition(currentEnd, currentDirection, dominoWidth, dominoHeight, isDouble, maxWidth, maxHeight) {
+    const MARGIN = 5;
+    let x = currentEnd.x;
+    let y = currentEnd.y;
+    let newDirection = currentDirection;
+    let rotation = 0;
+    let width = dominoWidth;
+    let height = dominoHeight;
+    
+    // Ajustements pour les doubles
+    if (isDouble) {
+      if (currentDirection === 'right' || currentDirection === 'left') {
+        width = dominoHeight;
+        height = dominoWidth;
+        rotation = 90;
+      }
+    } else {
+      // Domino normal - ajuster selon la direction
+      if (currentDirection === 'up' || currentDirection === 'down') {
+        width = dominoHeight;
+        height = dominoWidth;
+        rotation = 90;
+      }
+    }
+    
+    // Calculer la position selon la direction actuelle
+    switch (currentDirection) {
+      case 'right':
+        x = currentEnd.x + MARGIN;
+        y = currentEnd.y - height / 2;
+        // Vérifier si on sort des limites
+        if (x + width > maxWidth) {
+          newDirection = 'down';
+          x = currentEnd.x - width / 2;
+          y = currentEnd.y + MARGIN;
+          width = dominoHeight;
+          height = dominoWidth;
+          rotation = 90;
+        }
+        break;
+        
+      case 'left':
+        x = currentEnd.x - width - MARGIN;
+        y = currentEnd.y - height / 2;
+        if (x < 0) {
+          newDirection = 'down';
+          x = currentEnd.x - width / 2;
+          y = currentEnd.y + MARGIN;
+          width = dominoHeight;
+          height = dominoWidth;
+          rotation = 90;
+        }
+        break;
+        
+      case 'down':
+        x = currentEnd.x - width / 2;
+        y = currentEnd.y + MARGIN;
+        if (y + height > maxHeight) {
+          newDirection = 'left';
+          x = currentEnd.x - width - MARGIN;
+          y = currentEnd.y - height / 2;
+          width = dominoWidth;
+          height = dominoHeight;
+          rotation = 0;
+        }
+        break;
+        
+      case 'up':
+        x = currentEnd.x - width / 2;
+        y = currentEnd.y - height - MARGIN;
+        if (y < 0) {
+          newDirection = 'right';
+          x = currentEnd.x + MARGIN;
+          y = currentEnd.y - height / 2;
+          width = dominoWidth;
+          height = dominoHeight;
+          rotation = 0;
+        }
+        break;
+    }
+    
+    return { x, y, width, height, rotation, newDirection };
+  }
+
+  // Algorithme de disposition intelligent pour mobile
+  function calculateSmartDominoLayout(board, boardSize) {
     if (!board || board.length === 0) return [];
     
     const positions = [];
     const DOMINO_WIDTH = 60;
     const DOMINO_HEIGHT = 30;
-    const MARGIN = 8;
+    const MARGIN = 5;
     const centerX = (boardSize.w || 400) / 2;
     const centerY = (boardSize.h || 400) / 2;
+    const maxWidth = boardSize.w - 100;
+    const maxHeight = boardSize.h - 100;
+    
+    // Variables pour suivre la chaîne
+    let leftEnd = { x: centerX, y: centerY }; // Position de l'extrémité gauche
+    let rightEnd = { x: centerX, y: centerY }; // Position de l'extrémité droite
+    let leftDirection = 'left'; // Direction de croissance à gauche
+    let rightDirection = 'right'; // Direction de croissance à droite
     
     board.forEach((piece, index) => {
       const values = GameLogic.extractDominoValues ? 
@@ -32,93 +125,76 @@ export function BoardArea({
       let width = DOMINO_WIDTH;
       let height = DOMINO_HEIGHT;
       let rotation = 0;
+      let x, y;
       
       if (index === 0) {
         // Premier domino au centre
-        positions.push({
-          x: centerX - width / 2,
-          y: centerY - height / 2,
-          width,
-          height,
-          rotation: isDouble ? 90 : 0
-        });
-      } else {
-        // Calculer la position en spirale
-        const spiral = getSpiralCoordinates(index, DOMINO_WIDTH, MARGIN);
-        
-        // Ajuster pour les doubles
         if (isDouble) {
           width = DOMINO_HEIGHT;
           height = DOMINO_WIDTH;
           rotation = 90;
-        } else if (spiral.vertical) {
-          width = DOMINO_HEIGHT;
-          height = DOMINO_WIDTH;
-          rotation = 90;
         }
+        x = centerX - width / 2;
+        y = centerY - height / 2;
         
-        positions.push({
-          x: centerX + spiral.x - width / 2,
-          y: centerY + spiral.y - height / 2,
-          width,
-          height,
-          rotation
-        });
+        // Initialiser les extrémités
+        leftEnd = { x: x, y: y + height / 2 };
+        rightEnd = { x: x + width, y: y + height / 2 };
+        
+      } else {
+        // Déterminer de quel côté ajouter le domino
+        // Pour simplifier, on alterne ou on utilise une logique basée sur l'index
+        const addToRight = index % 2 === 1; // Alterne droite/gauche
+        
+        if (addToRight) {
+          // Ajouter à droite
+          const newPos = calculateNextPosition(rightEnd, rightDirection, width, height, isDouble, maxWidth, maxHeight);
+          x = newPos.x;
+          y = newPos.y;
+          rotation = newPos.rotation;
+          width = newPos.width;
+          height = newPos.height;
+          rightDirection = newPos.newDirection;
+          
+          // Mettre à jour l'extrémité droite
+          rightEnd = {
+            x: x + (newPos.newDirection === 'right' ? width : (newPos.newDirection === 'left' ? 0 : width/2)),
+            y: y + (newPos.newDirection === 'down' ? height : (newPos.newDirection === 'up' ? 0 : height/2))
+          };
+        } else {
+          // Ajouter à gauche
+          const newPos = calculateNextPosition(leftEnd, leftDirection, width, height, isDouble, maxWidth, maxHeight);
+          x = newPos.x;
+          y = newPos.y;
+          rotation = newPos.rotation;
+          width = newPos.width;
+          height = newPos.height;
+          leftDirection = newPos.newDirection;
+          
+          // Mettre à jour l'extrémité gauche
+          leftEnd = {
+            x: x + (newPos.newDirection === 'left' ? 0 : (newPos.newDirection === 'right' ? width : width/2)),
+            y: y + (newPos.newDirection === 'up' ? 0 : (newPos.newDirection === 'down' ? height : height/2))
+          };
+        }
       }
+      
+      positions.push({ x, y, width, height, rotation });
     });
     
     return positions;
   }
 
-  // Fonction pour calculer les coordonnées en spirale
-  function getSpiralCoordinates(index, dominoSize, margin) {
-    const layer = Math.floor((index + 3) / 4); // Couche de la spirale
-    const posInLayer = (index - 1) % 4; // Position dans la couche
-    const distance = layer * (dominoSize + margin);
-    
-    let x = 0, y = 0, vertical = false;
-    
-    switch (posInLayer) {
-      case 0: // Droite
-        x = distance;
-        y = 0;
-        vertical = false;
-        break;
-      case 1: // Bas
-        x = distance;
-        y = distance;
-        vertical = true;
-        break;
-      case 2: // Gauche
-        x = 0;
-        y = distance;
-        vertical = false;
-        break;
-      case 3: // Haut
-        x = 0;
-        y = 0;
-        vertical = true;
-        break;
-    }
-    
-    // Ajouter une petite variation pour éviter la superposition
-    const variation = layer * 5;
-    x += Math.cos(index * 0.5) * variation;
-    y += Math.sin(index * 0.5) * variation;
-    
-    return { x, y, vertical };
-  }
-
   useEffect(() => {
     if (board && board.length > 0) {
-      const positions = calculateSpiralDominoLayout(board, boardSize);
+      const positions = calculateSmartDominoLayout(board, boardSize);
       setDominoPositions(positions);
     } else {
       setDominoPositions([]);
     }
   }, [board, boardSize]);
 
-  console.log('🎲 Board (Spiral):', { 
+  console.log('🎲 Board (Smart Layout):', { 
     boardLength: board?.length, 
     boardSize, 
     positionsCount: dominoPositions.length 
@@ -131,7 +207,7 @@ export function BoardArea({
       
       <View style={S.debugInfo} pointerEvents="none">
         <Text style={S.debugText}>
-          🌀 {board?.length || 0} dominos (spirale) | {boardSize.w?.toFixed(0)}×{boardSize.h?.toFixed(0)}
+          🎯 {board?.length || 0} dominos (smart) | {boardSize.w?.toFixed(0)}×{boardSize.h?.toFixed(0)}
         </Text>
         {boardEnds && (
           <Text style={S.debugText}>
@@ -158,12 +234,12 @@ export function BoardArea({
           {isEmpty && (
             <View style={S.emptyBoard}>
               <View style={S.emptyIcon}>
-                <Text style={S.emptyIconTxt}>🌀</Text>
+                <Text style={S.emptyIconTxt}>🎯</Text>
               </View>
               <Text style={S.emptyTxt}>Posez le premier domino</Text>
               <Text style={S.emptyHint}>
                 {isMyTurn 
-                  ? 'Les dominos se disposeront en spirale'
+                  ? 'Les dominos se disposeront intelligemment'
                   : 'En attente du premier joueur...'
                 }
               </Text>
@@ -236,8 +312,8 @@ export function BoardArea({
           activeOpacity={0.7}
         >
           <View style={S.centerZoneContent}>
-            <Text style={S.centerIcon}>🌀</Text>
-            <Text style={S.centerText}>COMMENCER LA SPIRALE</Text>
+            <Text style={S.centerIcon}>🎯</Text>
+            <Text style={S.centerText}>COMMENCER ICI</Text>
             <Text style={S.centerHint}>Premier domino au centre</Text>
           </View>
         </TouchableOpacity>
@@ -257,7 +333,7 @@ export function BoardArea({
             >
               <Text style={S.zoneArrow}>◀</Text>
               <Text style={S.zoneNumber}>{boardEnds?.left || 0}</Text>
-              <Text style={S.zoneLabel}>DÉBUT</Text>
+              <Text style={S.zoneLabel}>GAUCHE</Text>
             </TouchableOpacity>
           )}
           
@@ -273,7 +349,7 @@ export function BoardArea({
             >
               <Text style={S.zoneNumber}>{boardEnds?.right || 0}</Text>
               <Text style={S.zoneArrow}>▶</Text>
-              <Text style={S.zoneLabel}>FIN</Text>
+              <Text style={S.zoneLabel}>DROITE</Text>
             </TouchableOpacity>
           )}
         </>
@@ -282,7 +358,6 @@ export function BoardArea({
   );
 }
 
-// Reste de ton code inchangé...
 function DominoPreview({ piece, boardEnds, showLeft, showRight, positions }) {
   if (!piece || !positions || positions.length === 0) return null;
 
